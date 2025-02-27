@@ -38,7 +38,11 @@ const Index = () => {
 
   // If the user is logged in, redirect to the dashboard
   if (isLoggedIn) {
-    return <Dashboard />;
+    return (
+      <Layout>
+        <Dashboard />
+      </Layout>
+    );
   }
 
   // This is the landing page for non-logged-in users
