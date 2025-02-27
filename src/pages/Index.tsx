@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ArrowRight, Building, CreditCard, Home, Users, FileText, BarChart4, Settings } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
-import { Dashboard } from "./Dashboard";
+import Dashboard from "./Dashboard";
 
 const FeatureCard = ({ icon, title, description, link }: {
   icon: React.ReactNode;
