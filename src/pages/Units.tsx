@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,19 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 // Tipos para as unidades e moradores
 interface Unit {
@@ -106,6 +120,10 @@ export default function Units() {
     residentBlock: "",
     residentRole: "resident"
   });
+  const [openUnitDialog, setOpenUnitDialog] = useState(false);
+  const [openResidentDialog, setOpenResidentDialog] = useState(false);
+  const [openUnitCombobox, setOpenUnitCombobox] = useState(false);
+  const [openBlockCombobox, setOpenBlockCombobox] = useState(false);
 
   // Carregar dados do Supabase
   useEffect(() => {
@@ -196,6 +214,7 @@ export default function Units() {
       setUnits(prev => [...prev, data[0]]);
       
       resetUnitForm();
+      setOpenUnitDialog(false);
       
       toast({
         title: "Sucesso",
@@ -246,6 +265,7 @@ export default function Units() {
       
       resetUnitForm();
       setSelectedUnit(null);
+      setOpenUnitDialog(false);
       
       toast({
         title: "Sucesso",
@@ -346,6 +366,7 @@ export default function Units() {
       fetchResidents();
       
       resetResidentForm();
+      setOpenResidentDialog(false);
       
       toast({
         title: "Sucesso",
@@ -427,6 +448,7 @@ export default function Units() {
       
       resetResidentForm();
       setSelectedResident(null);
+      setOpenResidentDialog(false);
       
       toast({
         title: "Sucesso",
@@ -543,6 +565,7 @@ export default function Units() {
       unitOwner: unit.owner,
       unitStatus: unit.status
     }));
+    setOpenUnitDialog(true);
   }
 
   // Editar morador
@@ -558,6 +581,7 @@ export default function Units() {
       residentBlock: resident.unit_block || "",
       residentRole: resident.role
     }));
+    setOpenResidentDialog(true);
   }
 
   // Adicionar morador a partir de uma unidade
@@ -574,6 +598,7 @@ export default function Units() {
       residentPhone: "",
       residentRole: "resident"
     }));
+    setOpenResidentDialog(true);
   }
 
   // Lidar com a abertura do diálogo de adicionar unidade
@@ -581,6 +606,7 @@ export default function Units() {
     setIsAddingUnit(true);
     setSelectedUnit(null);
     resetUnitForm();
+    setOpenUnitDialog(true);
   }
 
   // Lidar com a abertura do diálogo de adicionar morador
@@ -588,7 +614,14 @@ export default function Units() {
     setIsAddingResident(true);
     setSelectedResident(null);
     resetResidentForm();
+    setOpenResidentDialog(true);
   }
+
+  // Obter lista única de números de unidades para o combobox
+  const uniqueUnitNumbers = Array.from(new Set(units.map(unit => unit.number)));
+  
+  // Obter lista única de blocos para o combobox
+  const uniqueBlocks = Array.from(new Set(units.map(unit => unit.block)));
 
   return (
     <div className="space-y-6">
@@ -624,168 +657,13 @@ export default function Units() {
               />
             </div>
 
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button 
-                  className="flex items-center gap-2"
-                  onClick={activeTab === "units" ? handleOpenAddUnitDialog : handleOpenAddResidentDialog}
-                >
-                  <PlusCircle size={16} />
-                  <span>{activeTab === "units" ? "Nova Unidade" : "Novo Morador"}</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>
-                    {activeTab === "units" 
-                      ? (isAddingUnit ? "Adicionar Nova Unidade" : "Editar Unidade") 
-                      : (isAddingResident ? "Adicionar Novo Morador" : "Editar Morador")}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {activeTab === "units" 
-                      ? "Preencha os dados da unidade do condomínio." 
-                      : "Preencha os dados do morador do condomínio."}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  {activeTab === "units" ? (
-                    <>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="unit-number">Número</Label>
-                          <Input 
-                            id="unit-number" 
-                            placeholder="101" 
-                            value={formData.unitNumber}
-                            onChange={e => setFormData({...formData, unitNumber: e.target.value})}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="unit-block">Bloco</Label>
-                          <Input 
-                            id="unit-block" 
-                            placeholder="A" 
-                            value={formData.unitBlock}
-                            onChange={e => setFormData({...formData, unitBlock: e.target.value})}
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="unit-owner">Proprietário</Label>
-                        <Input 
-                          id="unit-owner" 
-                          placeholder="Nome do proprietário" 
-                          value={formData.unitOwner}
-                          onChange={e => setFormData({...formData, unitOwner: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="unit-status">Status</Label>
-                        <Select 
-                          value={formData.unitStatus}
-                          onValueChange={value => setFormData({...formData, unitStatus: value})}
-                        >
-                          <SelectTrigger id="unit-status">
-                            <SelectValue placeholder="Selecione o status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="occupied">Ocupado</SelectItem>
-                            <SelectItem value="vacant">Vago</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="space-y-2">
-                        <Label htmlFor="resident-name">Nome</Label>
-                        <Input 
-                          id="resident-name" 
-                          placeholder="Nome completo" 
-                          value={formData.residentName}
-                          onChange={e => setFormData({...formData, residentName: e.target.value})}
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="resident-email">Email</Label>
-                          <Input 
-                            id="resident-email" 
-                            type="email" 
-                            placeholder="email@exemplo.com" 
-                            value={formData.residentEmail}
-                            onChange={e => setFormData({...formData, residentEmail: e.target.value})}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="resident-phone">Telefone</Label>
-                          <Input 
-                            id="resident-phone" 
-                            placeholder="(00) 00000-0000" 
-                            value={formData.residentPhone}
-                            onChange={e => setFormData({...formData, residentPhone: e.target.value})}
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="resident-unit">Unidade</Label>
-                          <Input 
-                            id="resident-unit" 
-                            placeholder="101" 
-                            value={formData.residentUnit}
-                            onChange={e => setFormData({...formData, residentUnit: e.target.value})}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="resident-block">Bloco</Label>
-                          <Input 
-                            id="resident-block" 
-                            placeholder="A" 
-                            value={formData.residentBlock}
-                            onChange={e => setFormData({...formData, residentBlock: e.target.value})}
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="resident-role">Tipo</Label>
-                        <Select 
-                          value={formData.residentRole}
-                          onValueChange={value => setFormData({...formData, residentRole: value})}
-                        >
-                          <SelectTrigger id="resident-role">
-                            <SelectValue placeholder="Selecione o tipo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="owner">Proprietário</SelectItem>
-                            <SelectItem value="resident">Morador</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </>
-                  )}
-                </div>
-                <DialogFooter>
-                  <DialogClose asChild>
-                    <Button variant="outline">Cancelar</Button>
-                  </DialogClose>
-                  <Button 
-                    type="submit" 
-                    disabled={loading}
-                    onClick={() => {
-                      if (activeTab === "units") {
-                        isAddingUnit ? handleAddUnit() : handleUpdateUnit();
-                      } else {
-                        isAddingResident ? handleAddResident() : handleUpdateResident();
-                      }
-                    }}
-                  >
-                    {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {isAddingUnit || isAddingResident ? "Adicionar" : "Atualizar"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <Button 
+              className="flex items-center gap-2"
+              onClick={activeTab === "units" ? handleOpenAddUnitDialog : handleOpenAddResidentDialog}
+            >
+              <PlusCircle size={16} />
+              <span>{activeTab === "units" ? "Nova Unidade" : "Novo Morador"}</span>
+            </Button>
           </div>
         </div>
 
@@ -837,18 +715,14 @@ export default function Units() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DialogTrigger asChild onClick={() => handleEditUnit(unit)}>
-                              <DropdownMenuItem className="flex items-center gap-2 cursor-pointer">
-                                <PencilIcon size={16} />
-                                <span>Editar</span>
-                              </DropdownMenuItem>
-                            </DialogTrigger>
-                            <DialogTrigger asChild onClick={() => handleAddResidentToUnit(unit)}>
-                              <DropdownMenuItem className="flex items-center gap-2 cursor-pointer">
-                                <UserPlus size={16} />
-                                <span>Adicionar Morador</span>
-                              </DropdownMenuItem>
-                            </DialogTrigger>
+                            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer" onClick={() => handleEditUnit(unit)}>
+                              <PencilIcon size={16} />
+                              <span>Editar</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer" onClick={() => handleAddResidentToUnit(unit)}>
+                              <UserPlus size={16} />
+                              <span>Adicionar Morador</span>
+                            </DropdownMenuItem>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <DropdownMenuItem className="flex items-center gap-2 text-red-600 cursor-pointer" onSelect={(e) => e.preventDefault()}>
@@ -951,12 +825,10 @@ export default function Units() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DialogTrigger asChild onClick={() => handleEditResident(resident)}>
-                              <DropdownMenuItem className="flex items-center gap-2 cursor-pointer">
-                                <PencilIcon size={16} />
-                                <span>Editar</span>
-                              </DropdownMenuItem>
-                            </DialogTrigger>
+                            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer" onClick={() => handleEditResident(resident)}>
+                              <PencilIcon size={16} />
+                              <span>Editar</span>
+                            </DropdownMenuItem>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <DropdownMenuItem className="flex items-center gap-2 text-red-600 cursor-pointer" onSelect={(e) => e.preventDefault()}>
@@ -1000,6 +872,227 @@ export default function Units() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Modal de Unidade */}
+      <Dialog open={openUnitDialog} onOpenChange={setOpenUnitDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {isAddingUnit ? "Adicionar Nova Unidade" : "Editar Unidade"}
+            </DialogTitle>
+            <DialogDescription>
+              Preencha os dados da unidade do condomínio.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="unit-number">Número</Label>
+                <Input 
+                  id="unit-number" 
+                  placeholder="101" 
+                  value={formData.unitNumber}
+                  onChange={e => setFormData({...formData, unitNumber: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="unit-block">Bloco</Label>
+                <Input 
+                  id="unit-block" 
+                  placeholder="A" 
+                  value={formData.unitBlock}
+                  onChange={e => setFormData({...formData, unitBlock: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="unit-owner">Proprietário</Label>
+              <Input 
+                id="unit-owner" 
+                placeholder="Nome do proprietário" 
+                value={formData.unitOwner}
+                onChange={e => setFormData({...formData, unitOwner: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="unit-status">Status</Label>
+              <Select 
+                value={formData.unitStatus}
+                onValueChange={value => setFormData({...formData, unitStatus: value})}
+              >
+                <SelectTrigger id="unit-status">
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="occupied">Ocupado</SelectItem>
+                  <SelectItem value="vacant">Vago</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenUnitDialog(false)}>Cancelar</Button>
+            <Button 
+              type="submit" 
+              disabled={loading}
+              onClick={() => isAddingUnit ? handleAddUnit() : handleUpdateUnit()}
+            >
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isAddingUnit ? "Adicionar" : "Atualizar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Morador */}
+      <Dialog open={openResidentDialog} onOpenChange={setOpenResidentDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {isAddingResident ? "Adicionar Novo Morador" : "Editar Morador"}
+            </DialogTitle>
+            <DialogDescription>
+              Preencha os dados do morador do condomínio.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="resident-name">Nome</Label>
+              <Input 
+                id="resident-name" 
+                placeholder="Nome completo" 
+                value={formData.residentName}
+                onChange={e => setFormData({...formData, residentName: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="resident-email">Email</Label>
+                <Input 
+                  id="resident-email" 
+                  type="email" 
+                  placeholder="email@exemplo.com" 
+                  value={formData.residentEmail}
+                  onChange={e => setFormData({...formData, residentEmail: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="resident-phone">Telefone</Label>
+                <Input 
+                  id="resident-phone" 
+                  placeholder="(00) 00000-0000" 
+                  value={formData.residentPhone}
+                  onChange={e => setFormData({...formData, residentPhone: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="resident-unit">Unidade</Label>
+                <Popover open={openUnitCombobox} onOpenChange={setOpenUnitCombobox}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openUnitCombobox}
+                      className="w-full justify-between"
+                    >
+                      {formData.residentUnit
+                        ? formData.residentUnit
+                        : "Selecione a unidade..."}
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar unidade..." />
+                      <CommandEmpty>Nenhuma unidade encontrada.</CommandEmpty>
+                      <CommandGroup className="max-h-[200px] overflow-y-auto">
+                        {uniqueUnitNumbers.map((number) => (
+                          <CommandItem
+                            key={number}
+                            value={number}
+                            onSelect={(currentValue) => {
+                              setFormData({...formData, residentUnit: currentValue});
+                              setOpenUnitCombobox(false);
+                            }}
+                          >
+                            {number}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="resident-block">Bloco</Label>
+                <Popover open={openBlockCombobox} onOpenChange={setOpenBlockCombobox}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={openBlockCombobox}
+                      className="w-full justify-between"
+                    >
+                      {formData.residentBlock
+                        ? formData.residentBlock
+                        : "Selecione o bloco..."}
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar bloco..." />
+                      <CommandEmpty>Nenhum bloco encontrado.</CommandEmpty>
+                      <CommandGroup className="max-h-[200px] overflow-y-auto">
+                        {uniqueBlocks.map((block) => (
+                          <CommandItem
+                            key={block}
+                            value={block}
+                            onSelect={(currentValue) => {
+                              setFormData({...formData, residentBlock: currentValue});
+                              setOpenBlockCombobox(false);
+                            }}
+                          >
+                            {block}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="resident-role">Tipo</Label>
+              <Select 
+                value={formData.residentRole}
+                onValueChange={value => setFormData({...formData, residentRole: value})}
+              >
+                <SelectTrigger id="resident-role">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="owner">Proprietário</SelectItem>
+                  <SelectItem value="resident">Morador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenResidentDialog(false)}>Cancelar</Button>
+            <Button 
+              type="submit" 
+              disabled={loading}
+              onClick={() => isAddingResident ? handleAddResident() : handleUpdateResident()}
+            >
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isAddingResident ? "Adicionar" : "Atualizar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
