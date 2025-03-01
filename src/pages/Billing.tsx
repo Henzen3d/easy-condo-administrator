@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -169,7 +168,6 @@ const mockBillings: Billing[] = [
   }
 ];
 
-// Componente que mostra o status da cobrança com formatação visual
 const BillingStatusBadge = ({ status }: { status: BillingStatus }) => {
   const displayText = {
     pending: "Pendente",
@@ -185,7 +183,6 @@ const BillingStatusBadge = ({ status }: { status: BillingStatus }) => {
   );
 };
 
-// Componente do formulário de nova cobrança
 const NewBillingForm = ({ onClose }: { onClose: () => void }) => {
   return (
     <div className="grid gap-4">
@@ -224,7 +221,6 @@ const NewBillingForm = ({ onClose }: { onClose: () => void }) => {
   );
 };
 
-// Componente do filtro de cobranças
 const BillingFilters = () => {
   return (
     <Card>
@@ -275,13 +271,11 @@ const BillingFilters = () => {
   );
 };
 
-// Componente principal da página de cobranças
 const Billing = () => {
   const [isNewBillingOpen, setIsNewBillingOpen] = useState(false);
   const [tabValue, setTabValue] = useState("all");
   const [billings, setBillings] = useState<Billing[]>(mockBillings);
 
-  // Filtrar cobranças com base na aba selecionada
   const filteredBillings = billings.filter(billing => {
     if (tabValue === "all") return true;
     if (tabValue === "pending") return billing.status === "pending";
@@ -290,7 +284,6 @@ const Billing = () => {
     return true;
   });
 
-  // Função para marcar cobrança como paga
   const markAsPaid = (id: string) => {
     setBillings(prevBillings => 
       prevBillings.map(billing => 
@@ -299,7 +292,6 @@ const Billing = () => {
     );
   };
 
-  // Função para marcar cobrança como enviada
   const markAsSent = (id: string) => {
     setBillings(prevBillings => 
       prevBillings.map(billing => 
@@ -308,7 +300,6 @@ const Billing = () => {
     );
   };
 
-  // Função para marcar cobrança como impressa
   const markAsPrinted = (id: string) => {
     setBillings(prevBillings => 
       prevBillings.map(billing => 
@@ -317,7 +308,6 @@ const Billing = () => {
     );
   };
 
-  // Função para cancelar cobrança
   const cancelBilling = (id: string) => {
     setBillings(prevBillings => 
       prevBillings.map(billing => 
@@ -326,7 +316,6 @@ const Billing = () => {
     );
   };
 
-  // Formatação de valor monetário
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -334,61 +323,59 @@ const Billing = () => {
     }).format(value);
   };
 
-  // Formatação de data
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('pt-BR').format(date);
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Cobranças</h1>
-          <p className="text-muted-foreground">
-            Gerencie as cobranças do condomínio e acompanhe os pagamentos.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Dialog open={isNewBillingOpen} onOpenChange={setIsNewBillingOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus size={16} />
-                Nova Cobrança
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Nova Cobrança</DialogTitle>
-                <DialogDescription>
-                  Preencha as informações abaixo para criar uma nova cobrança.
-                </DialogDescription>
-              </DialogHeader>
-              <NewBillingForm onClose={() => setIsNewBillingOpen(false)} />
-            </DialogContent>
-          </Dialog>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="gap-2">
-                <Download size={16} />
-                Exportar
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Escolha o formato</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="cursor-pointer">
-                <FileText className="mr-2 h-4 w-4" />
-                <span>Exportar como PDF</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer">
-                <FileText className="mr-2 h-4 w-4" />
-                <span>Exportar como Excel</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+    <div className="container max-w-7xl mx-auto py-6 space-y-6 animate-fade-in">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Cobranças</h1>
+        <p className="text-muted-foreground animate-slide-in-top animation-delay-200">
+          Gerencie as cobranças do condomínio e acompanhe os pagamentos.
+        </p>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Dialog open={isNewBillingOpen} onOpenChange={setIsNewBillingOpen}>
+          <DialogTrigger asChild>
+            <Button className="gap-2">
+              <Plus size={16} />
+              Nova Cobrança
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Nova Cobrança</DialogTitle>
+              <DialogDescription>
+                Preencha as informações abaixo para criar uma nova cobrança.
+              </DialogDescription>
+            </DialogHeader>
+            <NewBillingForm onClose={() => setIsNewBillingOpen(false)} />
+          </DialogContent>
+        </Dialog>
+        
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <Download size={16} />
+              Exportar
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Escolha o formato</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-pointer">
+              <FileText className="mr-2 h-4 w-4" />
+              <span>Exportar como PDF</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer">
+              <FileText className="mr-2 h-4 w-4" />
+              <span>Exportar como Excel</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="grid md:grid-cols-4 gap-6">

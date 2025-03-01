@@ -358,14 +358,15 @@ const Reports = () => {
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Relatórios</h1>
-          <p className="text-muted-foreground">
-            Gere relatórios detalhados para acompanhar o desempenho do condomínio.
-          </p>
-        </div>
+    <div className="container max-w-7xl mx-auto py-6 space-y-6 animate-fade-in">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Relatórios</h1>
+        <p className="text-muted-foreground animate-slide-in-top animation-delay-200">
+          Gere relatórios detalhados para acompanhar o desempenho do condomínio.
+        </p>
+      </div>
+
+      <div className="flex justify-end">
         <Button className="gap-2" onClick={() => setIsGeneratingReport(true)}>
           <FileText size={16} />
           Novo Relatório Personalizado
@@ -381,7 +382,7 @@ const Reports = () => {
                 Selecione o período para os relatórios abaixo.
               </CardDescription>
             </div>
-            <div className="flex items-end gap-4">
+            <div className="flex flex-col md:flex-row items-end gap-4">
               <div>
                 <Label htmlFor="startDate">Data Inicial</Label>
                 <Input id="startDate" type="date" defaultValue="2024-01-01" />
