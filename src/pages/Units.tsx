@@ -124,6 +124,9 @@ export default function Units() {
   const [openResidentDialog, setOpenResidentDialog] = useState(false);
   const [openUnitCombobox, setOpenUnitCombobox] = useState(false);
   const [openBlockCombobox, setOpenBlockCombobox] = useState(false);
+  const [alertDialogOpen, setAlertDialogOpen] = useState(false);
+  const [unitToDelete, setUnitToDelete] = useState<number | null>(null);
+  const [residentToDelete, setResidentToDelete] = useState<Resident | null>(null);
 
   // Carregar dados do Supabase
   useEffect(() => {
@@ -284,20 +287,28 @@ export default function Units() {
     }
   }
 
+  // Preparar exclusão de unidade
+  function prepareDeleteUnit(id: number) {
+    setUnitToDelete(id);
+    setAlertDialogOpen(true);
+  }
+
   // Excluir unidade
-  async function handleDeleteUnit(id: number) {
+  async function handleDeleteUnit() {
+    if (!unitToDelete) return;
+    
     try {
       setLoading(true);
       
       const { error } = await supabase
         .from('units')
         .delete()
-        .eq('id', id);
+        .eq('id', unitToDelete);
 
       if (error) throw error;
       
       // Atualizar a lista local
-      setUnits(prev => prev.filter(unit => unit.id !== id));
+      setUnits(prev => prev.filter(unit => unit.id !== unitToDelete));
       
       toast({
         title: "Sucesso",
@@ -316,6 +327,8 @@ export default function Units() {
       });
     } finally {
       setLoading(false);
+      setUnitToDelete(null);
+      setAlertDialogOpen(false);
     }
   }
 
@@ -467,20 +480,28 @@ export default function Units() {
     }
   }
 
+  // Preparar exclusão de morador
+  function prepareDeleteResident(resident: Resident) {
+    setResidentToDelete(resident);
+    setAlertDialogOpen(true);
+  }
+
   // Excluir morador
-  async function handleDeleteResident(resident: Resident) {
+  async function handleDeleteResident() {
+    if (!residentToDelete) return;
+    
     try {
       setLoading(true);
       
       const { error } = await supabase
         .from('residents')
         .delete()
-        .eq('id', resident.id);
+        .eq('id', residentToDelete.id);
 
       if (error) throw error;
       
       // Atualizar contador de moradores na unidade
-      const unit = units.find(u => u.id === resident.unit_id);
+      const unit = units.find(u => u.id === residentToDelete.unit_id);
       if (unit) {
         await supabase
           .from('units')
@@ -506,6 +527,8 @@ export default function Units() {
       });
     } finally {
       setLoading(false);
+      setResidentToDelete(null);
+      setAlertDialogOpen(false);
     }
   }
 
@@ -525,8 +548,8 @@ export default function Units() {
     return (
       resident.name.toLowerCase().includes(searchLower) ||
       resident.email.toLowerCase().includes(searchLower) ||
-      resident.unit_number?.toLowerCase().includes(searchLower) ||
-      resident.unit_block?.toLowerCase().includes(searchLower)
+      (resident.unit_number && resident.unit_number.toLowerCase().includes(searchLower)) ||
+      (resident.unit_block && resident.unit_block.toLowerCase().includes(searchLower))
     );
   });
 
@@ -618,10 +641,10 @@ export default function Units() {
   }
 
   // Obter lista única de números de unidades para o combobox
-  const uniqueUnitNumbers = Array.from(new Set(units.map(unit => unit.number)));
+  const uniqueUnitNumbers = Array.from(new Set(units.map(unit => unit.number))).filter(Boolean);
   
   // Obter lista única de blocos para o combobox
-  const uniqueBlocks = Array.from(new Set(units.map(unit => unit.block)));
+  const uniqueBlocks = Array.from(new Set(units.map(unit => unit.block))).filter(Boolean);
 
   return (
     <div className="space-y-6">
@@ -723,32 +746,13 @@ export default function Units() {
                               <UserPlus size={16} />
                               <span>Adicionar Morador</span>
                             </DropdownMenuItem>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <DropdownMenuItem className="flex items-center gap-2 text-red-600 cursor-pointer" onSelect={(e) => e.preventDefault()}>
-                                  <Trash2 size={16} />
-                                  <span>Excluir</span>
-                                </DropdownMenuItem>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Tem certeza que deseja excluir a unidade {unit.number}, Bloco {unit.block}?
-                                    Essa ação não pode ser desfeita e também excluirá todos os moradores relacionados.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction 
-                                    className="bg-red-600 hover:bg-red-700"
-                                    onClick={() => handleDeleteUnit(unit.id)}
-                                  >
-                                    Excluir
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            <DropdownMenuItem 
+                              className="flex items-center gap-2 text-red-600 cursor-pointer" 
+                              onClick={() => prepareDeleteUnit(unit.id)}
+                            >
+                              <Trash2 size={16} />
+                              <span>Excluir</span>
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -829,32 +833,13 @@ export default function Units() {
                               <PencilIcon size={16} />
                               <span>Editar</span>
                             </DropdownMenuItem>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <DropdownMenuItem className="flex items-center gap-2 text-red-600 cursor-pointer" onSelect={(e) => e.preventDefault()}>
-                                  <Trash2 size={16} />
-                                  <span>Excluir</span>
-                                </DropdownMenuItem>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Tem certeza que deseja excluir o morador {resident.name}?
-                                    Essa ação não pode ser desfeita.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction 
-                                    className="bg-red-600 hover:bg-red-700"
-                                    onClick={() => handleDeleteResident(resident)}
-                                  >
-                                    Excluir
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            <DropdownMenuItem 
+                              className="flex items-center gap-2 text-red-600 cursor-pointer" 
+                              onClick={() => prepareDeleteResident(resident)}
+                            >
+                              <Trash2 size={16} />
+                              <span>Excluir</span>
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -1093,6 +1078,29 @@ export default function Units() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de confirmação para exclusão */}
+      <AlertDialog open={alertDialogOpen} onOpenChange={setAlertDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              {unitToDelete 
+                ? "Tem certeza que deseja excluir esta unidade? Esta ação não pode ser desfeita e também excluirá todos os moradores relacionados."
+                : "Tem certeza que deseja excluir este morador? Esta ação não pode ser desfeita."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => unitToDelete ? handleDeleteUnit() : handleDeleteResident()}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
