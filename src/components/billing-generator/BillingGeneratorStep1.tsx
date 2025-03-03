@@ -280,7 +280,7 @@ const BillingGeneratorStep1 = ({
               </div>
             </div>
 
-            <Alert variant="warning">
+            <Alert variant="default" className="bg-amber-50 border-amber-200 text-amber-800">
               <AlertDescription>
                 A utilização do desconto requer aprovação em Assembleia e outras questões legais. 
                 Verifique antes de aplicá-lo nas cobranças do Condomínio.
