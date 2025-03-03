@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,13 +15,15 @@ import BillingGeneratorStep2 from "@/components/billing-generator/BillingGenerat
 import BillingGeneratorStep3 from "@/components/billing-generator/BillingGeneratorStep3";
 import BillingGeneratorStep4 from "@/components/billing-generator/BillingGeneratorStep4";
 import BillingGeneratorTabs from "@/components/billing-generator/BillingGeneratorTabs";
+import BillingGeneratorConsumption from "@/components/billing-generator/BillingGeneratorConsumption";
 
 // Define the steps of the billing generator process
 const STEPS = [
   { id: 1, name: "Geral" },
-  { id: 2, name: "Itens de Cobrança" },
-  { id: 3, name: "Configurações dos Boletos" },
-  { id: 4, name: "Confirmar" },
+  { id: 2, name: "Consumo" },
+  { id: 3, name: "Itens de Cobrança" },
+  { id: 4, name: "Configurações dos Boletos" },
+  { id: 5, name: "Confirmar" },
 ];
 
 const BillingGenerator = () => {
@@ -37,6 +38,8 @@ const BillingGenerator = () => {
     dueDate: "",
     includeGasConsumption: false,
     includeWaterConsumption: false,
+    gasConsumptionItems: [],
+    waterConsumptionItems: [],
     earlyPaymentDiscount: {
       enabled: false,
       dueDate: "",
@@ -97,19 +100,26 @@ const BillingGenerator = () => {
         );
       case 2:
         return (
+          <BillingGeneratorConsumption
+            billingData={billingData}
+            updateBillingData={updateBillingData}
+          />
+        );
+      case 3:
+        return (
           <BillingGeneratorStep2 
             billingData={billingData} 
             updateBillingData={updateBillingData} 
           />
         );
-      case 3:
+      case 4:
         return (
           <BillingGeneratorStep3 
             billingData={billingData} 
             updateBillingData={updateBillingData} 
           />
         );
-      case 4:
+      case 5:
         return (
           <BillingGeneratorStep4 
             billingData={billingData} 
@@ -119,6 +129,29 @@ const BillingGenerator = () => {
         return null;
     }
   };
+
+  // Prepare all charge items including consumption items
+  const prepareAllChargeItems = () => {
+    let allItems = [...billingData.chargeItems];
+    
+    if (billingData.includeGasConsumption && billingData.gasConsumptionItems.length > 0) {
+      allItems = [...allItems, ...billingData.gasConsumptionItems];
+    }
+    
+    if (billingData.includeWaterConsumption && billingData.waterConsumptionItems.length > 0) {
+      allItems = [...allItems, ...billingData.waterConsumptionItems];
+    }
+    
+    return allItems;
+  };
+
+  // Update charge items when moving to step 3
+  useEffect(() => {
+    if (activeStep === 3) {
+      const allItems = prepareAllChargeItems();
+      updateBillingData({ chargeItems: allItems });
+    }
+  }, [activeStep]);
 
   // Render the navigation buttons
   const renderNavButtons = () => {

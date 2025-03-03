@@ -51,6 +51,117 @@ export type Database = {
         }
         Relationships: []
       }
+      consumption_bills: {
+        Row: {
+          billing_date: string
+          billing_period_end: string
+          billing_period_start: string
+          consumption_amount: number
+          created_at: string | null
+          current_reading_id: number | null
+          id: number
+          previous_reading_id: number | null
+          rate_used: number
+          status: string
+          total_amount: number
+          unit_id: number
+          updated_at: string | null
+          utility_type: string
+        }
+        Insert: {
+          billing_date: string
+          billing_period_end: string
+          billing_period_start: string
+          consumption_amount: number
+          created_at?: string | null
+          current_reading_id?: number | null
+          id?: number
+          previous_reading_id?: number | null
+          rate_used: number
+          status?: string
+          total_amount: number
+          unit_id: number
+          updated_at?: string | null
+          utility_type: string
+        }
+        Update: {
+          billing_date?: string
+          billing_period_end?: string
+          billing_period_start?: string
+          consumption_amount?: number
+          created_at?: string | null
+          current_reading_id?: number | null
+          id?: number
+          previous_reading_id?: number | null
+          rate_used?: number
+          status?: string
+          total_amount?: number
+          unit_id?: number
+          updated_at?: string | null
+          utility_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consumption_bills_current_reading_id_fkey"
+            columns: ["current_reading_id"]
+            isOneToOne: false
+            referencedRelation: "meter_readings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consumption_bills_previous_reading_id_fkey"
+            columns: ["previous_reading_id"]
+            isOneToOne: false
+            referencedRelation: "meter_readings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "consumption_bills_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meter_readings: {
+        Row: {
+          created_at: string | null
+          id: number
+          reading_date: string
+          reading_value: number
+          unit_id: number
+          updated_at: string | null
+          utility_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: number
+          reading_date: string
+          reading_value: number
+          unit_id: number
+          updated_at?: string | null
+          utility_type: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: number
+          reading_date?: string
+          reading_value?: number
+          unit_id?: number
+          updated_at?: string | null
+          utility_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meter_readings_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       residents: {
         Row: {
           created_at: string
@@ -167,6 +278,33 @@ export type Database = {
           residents?: number
           status?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      utility_rates: {
+        Row: {
+          created_at: string | null
+          effective_date: string
+          id: number
+          rate_per_cubic_meter: number
+          updated_at: string | null
+          utility_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          effective_date: string
+          id?: number
+          rate_per_cubic_meter: number
+          updated_at?: string | null
+          utility_type: string
+        }
+        Update: {
+          created_at?: string | null
+          effective_date?: string
+          id?: number
+          rate_per_cubic_meter?: number
+          updated_at?: string | null
+          utility_type?: string
         }
         Relationships: []
       }

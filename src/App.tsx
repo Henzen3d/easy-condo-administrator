@@ -1,45 +1,59 @@
 
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
-import Dashboard from "./pages/Dashboard";
-import Units from "./pages/Units";
-import BankAccounts from "./pages/BankAccounts";
-import Transactions from "./pages/Transactions";
-import Billing from "./pages/Billing";
-import Reports from "./pages/Reports";
-import BillingGenerator from "./pages/BillingGenerator";
-import Settings from "./pages/Settings";
-import { Layout } from "./components/layout/Layout";
+import { useState, useEffect } from "react";
+import { Routes, Route, useLocation } from "react-router-dom";
+import { Toaster } from "sonner";
+import { Layout } from "@/components/layout/Layout";
+import Dashboard from "@/pages/Dashboard";
+import Units from "@/pages/Units";
+import BankAccounts from "@/pages/BankAccounts";
+import Transactions from "@/pages/Transactions";
+import Billing from "@/pages/Billing";
+import BillingGenerator from "@/pages/BillingGenerator";
+import Reports from "@/pages/Reports";
+import Settings from "@/pages/Settings";
+import NotFound from "@/pages/NotFound";
+import Index from "@/pages/Index";
+import UtilityManagement from "@/pages/UtilityManagement";
 
-const queryClient = new QueryClient();
+function App() {
+  const location = useLocation();
+  const [isMounted, setIsMounted] = useState(false);
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
-          <Route path="/units" element={<Layout><Units /></Layout>} />
-          <Route path="/bank-accounts" element={<Layout><BankAccounts /></Layout>} />
-          <Route path="/transactions" element={<Layout><Transactions /></Layout>} />
-          <Route path="/billing" element={<Layout><Billing /></Layout>} />
-          <Route path="/billing-generator" element={<Layout><BillingGenerator /></Layout>} />
-          <Route path="/reports" element={<Layout><Reports /></Layout>} />
-          <Route path="/settings" element={<Layout><Settings /></Layout>} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const isIndexPage = location.pathname === "/";
+
+  return (
+    <div className="min-h-screen bg-background font-sans antialiased">
+      {isMounted && (
+        <>
+          {isIndexPage ? (
+            <Routes>
+              <Route path="/" element={<Index />} />
+            </Routes>
+          ) : (
+            <Layout>
+              <Routes>
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/units" element={<Units />} />
+                <Route path="/bank-accounts" element={<BankAccounts />} />
+                <Route path="/transactions" element={<Transactions />} />
+                <Route path="/billing" element={<Billing />} />
+                <Route path="/billing-generator" element={<BillingGenerator />} />
+                <Route path="/utility-management" element={<UtilityManagement />} />
+                <Route path="/reports" element={<Reports />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Layout>
+          )}
+          <Toaster position="bottom-right" />
+        </>
+      )}
+    </div>
+  );
+}
 
 export default App;

@@ -14,7 +14,8 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
-  X
+  X,
+  Gauge
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -77,6 +78,11 @@ export function Sidebar({
       label: "Faturamento",
       icon: <FileText size={20} />,
       href: "/billing-generator",
+    },
+    {
+      label: "Gestão de Utilities",
+      icon: <Gauge size={20} />,
+      href: "/utility-management",
     },
     {
       label: "Relatórios",

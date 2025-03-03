@@ -1,5 +1,5 @@
 
-import { CalendarIcon, CheckCircle2 } from "lucide-react";
+import { CalendarIcon, CheckCircle2, Droplet, Flame } from "lucide-react";
 import { format } from "date-fns";
 import { pt } from 'date-fns/locale';
 import { Card, CardContent } from "@/components/ui/card";
@@ -59,6 +59,15 @@ const BillingGeneratorStep4 = ({ billingData }: BillingGeneratorStep4Props) => {
       ? `${mockUnits.find(u => String(u.id) === String(billingData.targetUnits))?.block}-${mockUnits.find(u => String(u.id) === String(billingData.targetUnits))?.number}`
       : "Unidade não encontrada";
 
+  // Count consumption items
+  const gasItems = billingData.chargeItems?.filter((item: any) => 
+    item.description?.includes('Consumo de Gás')
+  ).length || 0;
+  
+  const waterItems = billingData.chargeItems?.filter((item: any) => 
+    item.description?.includes('Consumo de Água')
+  ).length || 0;
+
   return (
     <div className="space-y-6">
       <div className="text-center mb-8">
@@ -102,16 +111,33 @@ const BillingGeneratorStep4 = ({ billingData }: BillingGeneratorStep4Props) => {
                 <span className="text-muted-foreground">Unidades:</span>
                 <span className="font-medium">{unitsDisplay}</span>
               </li>
-              {billingData.includeGasConsumption && (
+              
+              {billingData.statementPeriod?.startDate && billingData.statementPeriod?.endDate && (
                 <li className="flex justify-between">
-                  <span className="text-muted-foreground">Consumo de Gás:</span>
-                  <span className="font-medium">Incluído</span>
+                  <span className="text-muted-foreground">Período de Consumo:</span>
+                  <span className="font-medium">
+                    {format(new Date(billingData.statementPeriod.startDate), "dd/MM/yyyy")} a {format(new Date(billingData.statementPeriod.endDate), "dd/MM/yyyy")}
+                  </span>
                 </li>
               )}
-              {billingData.includeWaterConsumption && (
-                <li className="flex justify-between">
-                  <span className="text-muted-foreground">Consumo de Água:</span>
-                  <span className="font-medium">Incluído</span>
+              
+              {gasItems > 0 && (
+                <li className="flex justify-between text-amber-700 dark:text-amber-500">
+                  <span className="flex items-center">
+                    <Flame className="h-4 w-4 mr-1" />
+                    Consumo de Gás:
+                  </span>
+                  <span className="font-medium">{gasItems} unidade(s)</span>
+                </li>
+              )}
+              
+              {waterItems > 0 && (
+                <li className="flex justify-between text-blue-700 dark:text-blue-500">
+                  <span className="flex items-center">
+                    <Droplet className="h-4 w-4 mr-1" />
+                    Consumo de Água:
+                  </span>
+                  <span className="font-medium">{waterItems} unidade(s)</span>
                 </li>
               )}
             </ul>
@@ -183,11 +209,20 @@ const BillingGeneratorStep4 = ({ billingData }: BillingGeneratorStep4Props) => {
                     ? `${mockUnits.find(u => String(u.id) === String(item.unit))?.block}-${mockUnits.find(u => String(u.id) === String(item.unit))?.number}`
                     : "Unidade não encontrada";
                 
+                // Check if this is a gas or water consumption item
+                const isGasItem = item.description?.includes('Consumo de Gás');
+                const isWaterItem = item.description?.includes('Consumo de Água');
+                const icon = isGasItem ? <Flame className="h-4 w-4 mr-1 text-amber-600" /> : 
+                       isWaterItem ? <Droplet className="h-4 w-4 mr-1 text-blue-600" /> : null;
+                
                 return (
                   <li key={item.id || index} className="py-2">
                     <div className="flex justify-between">
                       <div>
-                        <p className="font-medium">{item.description}</p>
+                        <p className="font-medium flex items-center">
+                          {icon}
+                          {item.description}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           {category} • {unitDisplay}
                         </p>
