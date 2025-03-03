@@ -112,7 +112,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-30 flex h-full flex-col border-r bg-white shadow-sm transition-all duration-300 dark:bg-gray-900",
+        "fixed inset-y-0 left-0 z-30 flex h-full flex-col border-r bg-white shadow-sm transition-all duration-300 ease-in-out dark:bg-gray-900",
         isCollapsed ? "w-16" : "w-64",
         isMobile && "shadow-lg",
         className
@@ -122,7 +122,9 @@ export function Sidebar({
     >
       {/* Logo and collapse button */}
       <div className="flex items-center p-4 justify-between">
-        <Logo showText={!isCollapsed} size={isCollapsed ? "sm" : "md"} />
+        <div className="flex items-center">
+          <Logo showText={!isCollapsed} size={isCollapsed ? "sm" : "md"} />
+        </div>
         
         {isMobile ? (
           <Button 
@@ -139,7 +141,10 @@ export function Sidebar({
             variant="ghost"
             size="icon"
             onClick={onToggleCollapse}
-            className="ml-auto transition-opacity"
+            className={cn(
+              "ml-2 transition-opacity",
+              isCollapsed && "rotate-180"
+            )}
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}

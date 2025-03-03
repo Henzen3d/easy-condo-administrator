@@ -57,7 +57,7 @@ export function Layout({ children }: LayoutProps) {
       
       {/* Main content area */}
       <div 
-        className={`flex min-h-screen flex-1 flex-col transition-all duration-300 ${
+        className={`flex min-h-screen flex-1 flex-col transition-all duration-300 ease-in-out ${
           !isMobile ? (sidebarCollapsed ? "ml-16" : "ml-64") : "ml-0"
         }`}
       >
