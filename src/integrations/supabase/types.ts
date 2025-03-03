@@ -9,6 +9,48 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      bank_accounts: {
+        Row: {
+          account_number: string
+          account_type: string
+          agency: string
+          balance: number
+          bank: string
+          color: string
+          created_at: string | null
+          id: number
+          initial_balance: number
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          account_number: string
+          account_type: string
+          agency: string
+          balance?: number
+          bank: string
+          color?: string
+          created_at?: string | null
+          id?: number
+          initial_balance?: number
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          account_number?: string
+          account_type?: string
+          agency?: string
+          balance?: number
+          bank?: string
+          color?: string
+          created_at?: string | null
+          id?: number
+          initial_balance?: number
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       residents: {
         Row: {
           created_at: string
@@ -52,6 +94,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      transactions: {
+        Row: {
+          account: string
+          amount: number
+          category: string
+          date: string
+          description: string
+          id: number
+          payee: string | null
+          status: string
+          to_account: string | null
+          type: string
+          unit: string | null
+        }
+        Insert: {
+          account: string
+          amount: number
+          category: string
+          date: string
+          description: string
+          id?: number
+          payee?: string | null
+          status: string
+          to_account?: string | null
+          type: string
+          unit?: string | null
+        }
+        Update: {
+          account?: string
+          amount?: number
+          category?: string
+          date?: string
+          description?: string
+          id?: number
+          payee?: string | null
+          status?: string
+          to_account?: string | null
+          type?: string
+          unit?: string | null
+        }
+        Relationships: []
       }
       units: {
         Row: {

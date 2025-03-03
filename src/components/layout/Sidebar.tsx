@@ -34,7 +34,7 @@ export function Sidebar({ className, collapsed = false }: SidebarProps) {
     {
       label: "Dashboard",
       icon: <Home size={20} />,
-      href: "/",
+      href: "/dashboard",
     },
     {
       label: "Unidades & Moradores",
@@ -58,6 +58,11 @@ export function Sidebar({ className, collapsed = false }: SidebarProps) {
     },
     {
       label: "Faturamento",
+      icon: <FileText size={20} />,
+      href: "/billing-generator",
+    },
+    {
+      label: "Relatórios",
       icon: <Calendar size={20} />,
       href: "/reports",
     },

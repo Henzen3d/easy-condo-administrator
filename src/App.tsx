@@ -12,6 +12,7 @@ import BankAccounts from "./pages/BankAccounts";
 import Transactions from "./pages/Transactions";
 import Billing from "./pages/Billing";
 import Reports from "./pages/Reports";
+import BillingGenerator from "./pages/BillingGenerator";
 import Settings from "./pages/Settings";
 import { Layout } from "./components/layout/Layout";
 
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/bank-accounts" element={<Layout><BankAccounts /></Layout>} />
           <Route path="/transactions" element={<Layout><Transactions /></Layout>} />
           <Route path="/billing" element={<Layout><Billing /></Layout>} />
+          <Route path="/billing-generator" element={<Layout><BillingGenerator /></Layout>} />
           <Route path="/reports" element={<Layout><Reports /></Layout>} />
           <Route path="/settings" element={<Layout><Settings /></Layout>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
