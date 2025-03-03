@@ -6,12 +6,13 @@ import { Input } from "@/components/ui/input";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Settings, LogOut } from "lucide-react";
 
 interface HeaderProps {
-  onToggleSidebar?: () => void;
+  children?: React.ReactNode;
 }
 
-export function Header({ onToggleSidebar }: HeaderProps) {
+export function Header({ children }: HeaderProps) {
   const isMobile = useIsMobile();
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
@@ -24,17 +25,27 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   return (
     <header className="sticky top-0 z-10 flex h-16 w-full items-center justify-between border-b bg-background px-4 backdrop-blur-sm transition-all">
       <div className="flex items-center gap-4">
-        <div className="relative w-64">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Pesquisar..."
-            className="w-full bg-background pl-9 focus-visible:ring-primary"
-          />
-        </div>
+        {children}
+        
+        {!isMobile && (
+          <div className="relative w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Pesquisar..."
+              className="w-full bg-background pl-9 focus-visible:ring-primary"
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
+        {isMobile && (
+          <Button variant="ghost" size="icon" className="relative">
+            <Search size={20} />
+          </Button>
+        )}
+        
         <Button variant="ghost" size="icon" onClick={toggleTheme}>
           {theme === "light" ? <Moon size={20} /> : <Sun size={20} />}
         </Button>
@@ -74,5 +85,3 @@ export function Header({ onToggleSidebar }: HeaderProps) {
     </header>
   );
 }
-
-import { Settings, LogOut } from "lucide-react";
