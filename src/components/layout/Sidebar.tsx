@@ -12,7 +12,9 @@ import {
   Settings,
   Users,
   Calendar,
-  Menu,
+  ChevronLeft,
+  ChevronRight,
+  X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -110,7 +112,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-30 flex h-full flex-col border-r bg-white p-4 shadow-sm transition-all duration-300 dark:bg-gray-900",
+        "fixed inset-y-0 left-0 z-30 flex h-full flex-col border-r bg-white shadow-sm transition-all duration-300 dark:bg-gray-900",
         isCollapsed ? "w-16" : "w-64",
         isMobile && "shadow-lg",
         className
@@ -118,58 +120,57 @@ export function Sidebar({
       onMouseEnter={() => !isMobile && setIsHovering(true)}
       onMouseLeave={() => !isMobile && setIsHovering(false)}
     >
-      <div className="flex items-center justify-between py-2">
+      {/* Logo and collapse button */}
+      <div className="flex items-center p-4 justify-between">
         <Logo showText={!isCollapsed} size={isCollapsed ? "sm" : "md"} />
         
-        {isMobile && (
+        {isMobile ? (
           <Button 
             variant="ghost" 
             size="icon" 
             onClick={onMobileClose}
-            className="ml-2"
+            className="ml-auto"
+            aria-label="Close menu"
           >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              width="24" 
-              height="24" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2" 
-              strokeLinecap="round" 
-              strokeLinejoin="round"
-            >
-              <path d="M18 6 6 18" />
-              <path d="m6 6 12 12" />
-            </svg>
+            <X size={20} />
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onToggleCollapse}
+            className="ml-auto transition-opacity"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </Button>
         )}
       </div>
       
-      <div className="mt-8 flex flex-1 flex-col gap-1">
+      {/* Navigation items */}
+      <div className="mt-6 flex flex-1 flex-col gap-1 px-3">
         <TooltipProvider delayDuration={0}>
           {navItems.map((item) => {
             const isActive = location.pathname === item.href;
             return (
-              <Tooltip key={item.href} disableHoverableContent={!isCollapsed}>
+              <Tooltip key={item.href} delayDuration={400} disableHoverableContent={!isCollapsed}>
                 <TooltipTrigger asChild>
                   <Link to={item.href} onClick={isMobile ? onMobileClose : undefined}>
                     <Button
                       variant={isActive ? "default" : "ghost"}
                       size={isCollapsed ? "icon" : "default"}
                       className={cn(
-                        "justify-start transition-all",
-                        isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted",
-                        isCollapsed ? "w-full" : "w-full"
+                        "w-full justify-start transition-all",
+                        isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted"
                       )}
                     >
-                      <span className={cn("mr-2", isCollapsed && "mr-0")}>{item.icon}</span>
+                      <span className={cn("shrink-0", isCollapsed ? "" : "mr-2")}>{item.icon}</span>
                       {!isCollapsed && <span className="truncate">{item.label}</span>}
                     </Button>
                   </Link>
                 </TooltipTrigger>
                 {isCollapsed && (
-                  <TooltipContent side="right">
+                  <TooltipContent side="right" className="z-50">
                     {item.label}
                   </TooltipContent>
                 )}
@@ -180,80 +181,32 @@ export function Sidebar({
       </div>
 
       {/* Sidebar footer with Settings */}
-      <div className="mt-4 border-t pt-4">
+      <div className="mt-auto border-t px-3 py-4">
         <TooltipProvider delayDuration={0}>
-          <Tooltip disableHoverableContent={!isCollapsed}>
+          <Tooltip delayDuration={400} disableHoverableContent={!isCollapsed}>
             <TooltipTrigger asChild>
               <Link to={footerItem.href} onClick={isMobile ? onMobileClose : undefined}>
                 <Button
                   variant={location.pathname === footerItem.href ? "default" : "ghost"}
                   size={isCollapsed ? "icon" : "default"}
                   className={cn(
-                    "justify-start transition-all w-full",
+                    "w-full justify-start transition-all",
                     location.pathname === footerItem.href ? "bg-primary text-primary-foreground" : "hover:bg-muted"
                   )}
                 >
-                  <span className={cn("mr-2", isCollapsed && "mr-0")}>{footerItem.icon}</span>
+                  <span className={cn("shrink-0", isCollapsed ? "" : "mr-2")}>{footerItem.icon}</span>
                   {!isCollapsed && <span>{footerItem.label}</span>}
                 </Button>
               </Link>
             </TooltipTrigger>
             {isCollapsed && (
-              <TooltipContent side="right">
+              <TooltipContent side="right" className="z-50">
                 {footerItem.label}
               </TooltipContent>
             )}
           </Tooltip>
         </TooltipProvider>
       </div>
-
-      {/* Manual collapse toggle button (only on desktop) */}
-      {!isMobile && (
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={onToggleCollapse} 
-          className="mt-2 justify-center"
-        >
-          {collapsed ? (
-            <>
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="16" 
-                height="16" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
-                className="mr-2"
-              >
-                <path d="m9 18 6-6-6-6" />
-              </svg>
-              {!isCollapsed && <span>Recolher</span>}
-            </>
-          ) : (
-            <>
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                width="16" 
-                height="16" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-                strokeLinejoin="round"
-                className="mr-2"
-              >
-                <path d="m15 18-6-6 6-6" />
-              </svg>
-              <span>Recolher</span>
-            </>
-          )}
-        </Button>
-      )}
     </aside>
   );
 }

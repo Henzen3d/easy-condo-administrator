@@ -58,7 +58,7 @@ export function Layout({ children }: LayoutProps) {
       {/* Main content area */}
       <div 
         className={`flex min-h-screen flex-1 flex-col transition-all duration-300 ${
-          !isMobile && (sidebarCollapsed ? "ml-16" : "ml-64")
+          !isMobile ? (sidebarCollapsed ? "ml-16" : "ml-64") : "ml-0"
         }`}
       >
         <Header>
@@ -68,6 +68,7 @@ export function Layout({ children }: LayoutProps) {
               size="icon"
               onClick={toggleMobileMenu}
               className="mr-2"
+              aria-label="Open menu"
             >
               <Menu size={24} />
             </Button>
@@ -84,7 +85,7 @@ export function Layout({ children }: LayoutProps) {
       {/* Overlay for mobile menu */}
       {isMobile && isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-20" 
+          className="fixed inset-0 bg-black/50 z-20 animate-fade-in" 
           onClick={closeMobileMenu}
         />
       )}
