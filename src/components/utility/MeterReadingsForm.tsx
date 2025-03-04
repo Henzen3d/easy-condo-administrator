@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +28,7 @@ export default function MeterReadingsForm() {
   const [previousWaterReading, setPreviousWaterReading] = useState<MeterReading | null>(null);
   const [meterReading, setMeterReading] = useState({
     unit_id: "",
-    utility_type: "gas",
+    utility_type: "gas" as "gas" | "water",
     reading_value: "",
     reading_date: new Date().toISOString().split('T')[0]
   });
@@ -73,17 +72,30 @@ export default function MeterReadingsForm() {
       const { data, error } = await supabase
         .from('meter_readings')
         .select('*')
-        .eq('unit_id', meterReading.unit_id)
+        .eq('unit_id', parseInt(meterReading.unit_id))
         .eq('utility_type', meterReading.utility_type)
         .order('reading_date', { ascending: false })
         .limit(1);
 
       if (error) throw error;
       
-      if (meterReading.utility_type === 'gas') {
-        setPreviousGasReading(data.length > 0 ? data[0] : null);
+      if (data.length > 0) {
+        const readingData = {
+          ...data[0],
+          utility_type: data[0].utility_type as "gas" | "water"
+        };
+        
+        if (meterReading.utility_type === 'gas') {
+          setPreviousGasReading(readingData);
+        } else {
+          setPreviousWaterReading(readingData);
+        }
       } else {
-        setPreviousWaterReading(data.length > 0 ? data[0] : null);
+        if (meterReading.utility_type === 'gas') {
+          setPreviousGasReading(null);
+        } else {
+          setPreviousWaterReading(null);
+        }
       }
     } catch (error) {
       console.error("Error loading previous reading:", error);

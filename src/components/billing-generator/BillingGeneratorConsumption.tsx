@@ -138,7 +138,14 @@ export default function BillingGeneratorConsumption({
         .limit(1);
 
       if (gasError) throw gasError;
-      if (gasData.length > 0) setGasRate(gasData[0]);
+      if (gasData.length > 0) {
+        // Type assertion to ensure the utility_type is correctly typed
+        const gasRateData = { 
+          ...gasData[0], 
+          utility_type: gasData[0].utility_type as "gas" | "water" 
+        };
+        setGasRate(gasRateData);
+      }
 
       // Get latest water rate
       const { data: waterData, error: waterError } = await supabase
@@ -149,7 +156,14 @@ export default function BillingGeneratorConsumption({
         .limit(1);
 
       if (waterError) throw waterError;
-      if (waterData.length > 0) setWaterRate(waterData[0]);
+      if (waterData.length > 0) {
+        // Type assertion to ensure the utility_type is correctly typed
+        const waterRateData = { 
+          ...waterData[0], 
+          utility_type: waterData[0].utility_type as "gas" | "water" 
+        };
+        setWaterRate(waterRateData);
+      }
 
     } catch (error) {
       console.error("Error loading rates:", error);
@@ -189,10 +203,17 @@ export default function BillingGeneratorConsumption({
 
       if (currentError) throw currentError;
 
-      return {
-        previous: previousData.length > 0 ? previousData[0] : null,
-        current: currentData.length > 0 ? currentData[0] : null
-      };
+      const previous = previousData.length > 0 ? {
+        ...previousData[0],
+        utility_type: previousData[0].utility_type as "gas" | "water"
+      } : null;
+
+      const current = currentData.length > 0 ? {
+        ...currentData[0],
+        utility_type: currentData[0].utility_type as "gas" | "water"
+      } : null;
+
+      return { previous, current };
     } catch (error) {
       console.error(`Error fetching readings for unit ${unit_id}:`, error);
       return { previous: null, current: null };

@@ -21,7 +21,7 @@ export default function UtilityRatesForm() {
   const [gasRate, setGasRate] = useState<UtilityRate | null>(null);
   const [waterRate, setWaterRate] = useState<UtilityRate | null>(null);
   const [newRate, setNewRate] = useState({
-    utility_type: "gas",
+    utility_type: "gas" as "gas" | "water",
     rate_per_cubic_meter: "",
     effective_date: new Date().toISOString().split('T')[0]
   });
@@ -42,7 +42,14 @@ export default function UtilityRatesForm() {
         .limit(1);
 
       if (gasError) throw gasError;
-      if (gasData.length > 0) setGasRate(gasData[0]);
+      if (gasData.length > 0) {
+        // Type assertion to ensure the utility_type is correctly typed
+        const gasRateData = { 
+          ...gasData[0], 
+          utility_type: gasData[0].utility_type as "gas" | "water" 
+        };
+        setGasRate(gasRateData);
+      }
 
       // Get latest water rate
       const { data: waterData, error: waterError } = await supabase
@@ -53,7 +60,14 @@ export default function UtilityRatesForm() {
         .limit(1);
 
       if (waterError) throw waterError;
-      if (waterData.length > 0) setWaterRate(waterData[0]);
+      if (waterData.length > 0) {
+        // Type assertion to ensure the utility_type is correctly typed
+        const waterRateData = { 
+          ...waterData[0], 
+          utility_type: waterData[0].utility_type as "gas" | "water" 
+        };
+        setWaterRate(waterRateData);
+      }
 
     } catch (error) {
       console.error("Error loading rates:", error);
@@ -99,10 +113,15 @@ export default function UtilityRatesForm() {
 
       // Update the state with the new rate
       if (data && data.length > 0) {
+        const rateData = {
+          ...data[0],
+          utility_type: data[0].utility_type as "gas" | "water"
+        };
+        
         if (newRate.utility_type === 'gas') {
-          setGasRate(data[0]);
+          setGasRate(rateData);
         } else {
-          setWaterRate(data[0]);
+          setWaterRate(rateData);
         }
       }
 
