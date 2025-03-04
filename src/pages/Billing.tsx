@@ -41,6 +41,20 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Calendar, 
   CreditCard, 
@@ -184,6 +198,10 @@ const BillingStatusBadge = ({ status }: { status: BillingStatus }) => {
 };
 
 const NewBillingForm = ({ onClose }: { onClose: () => void }) => {
+  const [chargeType, setChargeType] = useState("fixed");
+  const [includeGas, setIncludeGas] = useState(false);
+  const [includeWater, setIncludeWater] = useState(false);
+  
   return (
     <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-4">
@@ -196,6 +214,144 @@ const NewBillingForm = ({ onClose }: { onClose: () => void }) => {
           <Input id="resident" placeholder="Nome do morador" />
         </div>
       </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="charge-type">Tipo de Cobrança</Label>
+        <Select 
+          defaultValue={chargeType}
+          onValueChange={(value) => setChargeType(value)}
+        >
+          <SelectTrigger id="charge-type">
+            <SelectValue placeholder="Selecione o tipo de cobrança" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fixed">Taxa Fixa</SelectItem>
+            <SelectItem value="consumption">Consumo</SelectItem>
+            <SelectItem value="extra">Taxa Extra</SelectItem>
+            <SelectItem value="custom">Personalizado</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      
+      {chargeType === "fixed" && (
+        <div className="space-y-2">
+          <Label>Taxa Fixa</Label>
+          <Select defaultValue="condo">
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o tipo de taxa" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="condo">Taxa Condominial</SelectItem>
+              <SelectItem value="reserve">Fundo de Reserva</SelectItem>
+              <SelectItem value="maintenance">Taxa de Manutenção</SelectItem>
+              <SelectItem value="insurance">Seguro</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      
+      {chargeType === "consumption" && (
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="gas">
+            <AccordionTrigger className="flex items-center">
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="include-gas" 
+                  checked={includeGas} 
+                  onCheckedChange={(checked) => setIncludeGas(!!checked)}
+                />
+                <Label htmlFor="include-gas" className="font-normal cursor-pointer">
+                  Consumo de Gás
+                </Label>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              {includeGas && (
+                <div className="space-y-3 pt-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="gas-previous">Leitura Anterior</Label>
+                      <Input id="gas-previous" type="number" min="0" step="0.01" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="gas-current">Leitura Atual</Label>
+                      <Input id="gas-current" type="number" min="0" step="0.01" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="gas-rate">Taxa por m³ (R$)</Label>
+                      <Input id="gas-rate" type="number" min="0" step="0.01" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="gas-total">Total (R$)</Label>
+                      <Input id="gas-total" type="number" min="0" step="0.01" readOnly />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </AccordionContent>
+          </AccordionItem>
+          
+          <AccordionItem value="water">
+            <AccordionTrigger className="flex items-center">
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="include-water" 
+                  checked={includeWater} 
+                  onCheckedChange={(checked) => setIncludeWater(!!checked)}
+                />
+                <Label htmlFor="include-water" className="font-normal cursor-pointer">
+                  Consumo de Água
+                </Label>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              {includeWater && (
+                <div className="space-y-3 pt-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="water-previous">Leitura Anterior</Label>
+                      <Input id="water-previous" type="number" min="0" step="0.01" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="water-current">Leitura Atual</Label>
+                      <Input id="water-current" type="number" min="0" step="0.01" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="water-rate">Taxa por m³ (R$)</Label>
+                      <Input id="water-rate" type="number" min="0" step="0.01" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="water-total">Total (R$)</Label>
+                      <Input id="water-total" type="number" min="0" step="0.01" readOnly />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
+      
+      {chargeType === "extra" && (
+        <div className="space-y-2">
+          <Label>Taxa Extra</Label>
+          <Select defaultValue="renovation">
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o tipo de taxa extra" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="renovation">Reforma</SelectItem>
+              <SelectItem value="holiday">Festas/Comemorações</SelectItem>
+              <SelectItem value="special">Despesa Especial</SelectItem>
+              <SelectItem value="other">Outro</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       
       <div className="space-y-2">
         <Label htmlFor="description">Descrição</Label>
