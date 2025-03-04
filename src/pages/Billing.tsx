@@ -51,21 +51,12 @@ import NewBillingForm from "@/components/billing/NewBillingForm";
 import BillingFilters from "@/components/billing/BillingFilters";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Billing } from "@/utils/consumptionUtils";
 
 type BillingStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
 
-interface Billing {
-  id: string;
-  unit: string;
-  unit_id?: number;
-  resident: string;
-  description: string;
-  amount: number;
+interface BillingDisplay extends Omit<Billing, 'due_date'> {
   dueDate: string;
-  status: BillingStatus;
-  isPrinted: boolean;
-  isSent: boolean;
-  created_at?: string;
 }
 
 const statusClasses = {
@@ -93,7 +84,7 @@ const BillingStatusBadge = ({ status }: { status: BillingStatus }) => {
 const Billing = () => {
   const [isNewBillingOpen, setIsNewBillingOpen] = useState(false);
   const [tabValue, setTabValue] = useState("all");
-  const [billings, setBillings] = useState<Billing[]>([]);
+  const [billings, setBillings] = useState<BillingDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchBillings = async () => {
@@ -106,14 +97,17 @@ const Billing = () => {
         .order('created_at', { ascending: false });
       
       if (error) {
-        if (error.code === '42P01') {
-          console.warn('Billings table does not exist yet, using mock data');
-          setBillings(mockBillings);
-        } else {
-          throw error;
-        }
-      } else {
-        setBillings(data || []);
+        console.error('Error fetching billings:', error);
+        toast.error('Erro ao carregar cobranças');
+        setBillings(mockBillings);
+      } else if (data) {
+        const formattedBillings: BillingDisplay[] = data.map(item => ({
+          ...item,
+          dueDate: item.due_date,
+          isPrinted: item.is_printed,
+          isSent: item.is_sent
+        }));
+        setBillings(formattedBillings);
       }
     } catch (error) {
       console.error('Error fetching billings:', error);
@@ -144,15 +138,7 @@ const Billing = () => {
         .eq('id', id);
       
       if (error) {
-        if (error.code === '42P01') {
-          setBillings(prevBillings => 
-            prevBillings.map(billing => 
-              billing.id === id ? { ...billing, status: "paid" } : billing
-            )
-          );
-        } else {
-          throw error;
-        }
+        throw error;
       } else {
         setBillings(prevBillings => 
           prevBillings.map(billing => 
@@ -171,19 +157,11 @@ const Billing = () => {
     try {
       const { error } = await supabase
         .from('billings')
-        .update({ isSent: true })
+        .update({ is_sent: true })
         .eq('id', id);
       
       if (error) {
-        if (error.code === '42P01') {
-          setBillings(prevBillings => 
-            prevBillings.map(billing => 
-              billing.id === id ? { ...billing, isSent: true } : billing
-            )
-          );
-        } else {
-          throw error;
-        }
+        throw error;
       } else {
         setBillings(prevBillings => 
           prevBillings.map(billing => 
@@ -202,19 +180,11 @@ const Billing = () => {
     try {
       const { error } = await supabase
         .from('billings')
-        .update({ isPrinted: true })
+        .update({ is_printed: true })
         .eq('id', id);
       
       if (error) {
-        if (error.code === '42P01') {
-          setBillings(prevBillings => 
-            prevBillings.map(billing => 
-              billing.id === id ? { ...billing, isPrinted: true } : billing
-            )
-          );
-        } else {
-          throw error;
-        }
+        throw error;
       } else {
         setBillings(prevBillings => 
           prevBillings.map(billing => 
@@ -237,15 +207,7 @@ const Billing = () => {
         .eq('id', id);
       
       if (error) {
-        if (error.code === '42P01') {
-          setBillings(prevBillings => 
-            prevBillings.map(billing => 
-              billing.id === id ? { ...billing, status: "cancelled" } : billing
-            )
-          );
-        } else {
-          throw error;
-        }
+        throw error;
       } else {
         setBillings(prevBillings => 
           prevBillings.map(billing => 

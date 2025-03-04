@@ -51,6 +51,59 @@ export type Database = {
         }
         Relationships: []
       }
+      billings: {
+        Row: {
+          amount: number
+          created_at: string | null
+          description: string
+          due_date: string
+          id: string
+          is_printed: boolean
+          is_sent: boolean
+          resident: string
+          status: string
+          unit: string
+          unit_id: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          description: string
+          due_date: string
+          id?: string
+          is_printed?: boolean
+          is_sent?: boolean
+          resident: string
+          status?: string
+          unit: string
+          unit_id?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          description?: string
+          due_date?: string
+          id?: string
+          is_printed?: boolean
+          is_sent?: boolean
+          resident?: string
+          status?: string
+          unit?: string
+          unit_id?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billings_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       consumption_bills: {
         Row: {
           billing_date: string

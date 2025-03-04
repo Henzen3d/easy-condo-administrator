@@ -49,3 +49,19 @@ export function calculateConsumptionTotal(
   
   return { consumption, total };
 }
+
+// Add a type definition for the Billing interface that matches the database schema
+export interface Billing {
+  id: string;
+  unit: string;
+  unit_id?: number;
+  resident: string;
+  description: string;
+  amount: number;
+  due_date: string;
+  status: 'pending' | 'paid' | 'overdue' | 'cancelled';
+  is_printed: boolean;
+  is_sent: boolean;
+  created_at?: string;
+  updated_at?: string;
+}

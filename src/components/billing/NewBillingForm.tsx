@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,10 +5,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getLatestMeterReading, getCurrentUtilityRate, calculateConsumptionTotal } from "@/utils/consumptionUtils";
+import { getLatestMeterReading, getCurrentUtilityRate, calculateConsumptionTotal, Billing } from "@/utils/consumptionUtils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { v4 as uuidv4 } from 'uuid';
 
 interface Unit {
   id: number;
@@ -42,7 +40,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
   const [amount, setAmount] = useState<number | "">("");
   const [dueDate, setDueDate] = useState("");
   
-  // Gas consumption state
   const [includeGas, setIncludeGas] = useState(false);
   const [gasPrevious, setGasPrevious] = useState<number | "">("");
   const [gasCurrent, setGasCurrent] = useState<number | "">("");
@@ -50,7 +47,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
   const [gasTotal, setGasTotal] = useState<number>(0);
   const [isInitialGasReading, setIsInitialGasReading] = useState(true);
   
-  // Water consumption state
   const [includeWater, setIncludeWater] = useState(false);
   const [waterPrevious, setWaterPrevious] = useState<number | "">("");
   const [waterCurrent, setWaterCurrent] = useState<number | "">("");
@@ -58,15 +54,12 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
   const [waterTotal, setWaterTotal] = useState<number>(0);
   const [isInitialWaterReading, setIsInitialWaterReading] = useState(true);
 
-  // Calculate total amount
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch units and residents from database
   useEffect(() => {
     async function fetchUnitsAndResidents() {
       try {
-        // Fetch units
         const { data: unitsData, error: unitsError } = await supabase
           .from('units')
           .select('*')
@@ -75,7 +68,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         if (unitsError) throw unitsError;
         setUnits(unitsData || []);
         
-        // Fetch residents
         const { data: residentsData, error: residentsError } = await supabase
           .from('residents')
           .select('*')
@@ -92,7 +84,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     fetchUnitsAndResidents();
   }, []);
 
-  // Effect to calculate gas total
   useEffect(() => {
     if (typeof gasPrevious === 'number' && typeof gasCurrent === 'number' && typeof gasRate === 'number') {
       const { total } = calculateConsumptionTotal(gasPrevious, gasCurrent, gasRate);
@@ -102,7 +93,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     }
   }, [gasPrevious, gasCurrent, gasRate]);
 
-  // Effect to calculate water total
   useEffect(() => {
     if (typeof waterPrevious === 'number' && typeof waterCurrent === 'number' && typeof waterRate === 'number') {
       const { total } = calculateConsumptionTotal(waterPrevious, waterCurrent, waterRate);
@@ -112,7 +102,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     }
   }, [waterPrevious, waterCurrent, waterRate]);
 
-  // Effect to update total amount
   useEffect(() => {
     let total = 0;
     
@@ -131,7 +120,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     setTotalAmount(total);
   }, [amount, includeGas, gasTotal, includeWater, waterTotal]);
 
-  // Effect to fetch utility rates when checkboxes are checked
   useEffect(() => {
     async function fetchRates() {
       if (includeGas && gasRate === "") {
@@ -152,7 +140,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     fetchRates();
   }, [includeGas, includeWater, gasRate, waterRate]);
 
-  // Effect to fetch previous readings when unit changes
   useEffect(() => {
     async function fetchPreviousReadings() {
       if (!unitId) return;
@@ -181,22 +168,18 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     fetchPreviousReadings();
   }, [unitId, includeGas, includeWater, gasPrevious, waterPrevious]);
 
-  // Handle unit selection change
   const handleUnitChange = (value: string) => {
     setUnit(value);
     
-    // Find the unit object based on the value (which could be "block-number" format)
     const selectedUnitObj = units.find(u => `${u.block}-${u.number}` === value);
     
     if (selectedUnitObj) {
       setUnitId(selectedUnitObj.id);
       
-      // Find resident associated with this unit and set it
       const unitResident = residents.find(r => r.unit_id === selectedUnitObj.id);
       if (unitResident) {
         setResident(unitResident.name);
       } else {
-        // If no resident is associated, use the owner name
         setResident(selectedUnitObj.owner);
       }
     } else {
@@ -210,7 +193,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     
     const readings = [];
     
-    // Save gas reading if included
     if (includeGas && typeof gasCurrent === 'number' && gasCurrent > 0) {
       readings.push({
         unit_id: unitId,
@@ -220,7 +202,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
       });
     }
     
-    // Save water reading if included
     if (includeWater && typeof waterCurrent === 'number' && waterCurrent > 0) {
       readings.push({
         unit_id: unitId,
@@ -254,7 +235,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         return;
       }
       
-      // First save any meter readings if they exist
       const readingsSaved = await saveMeterReadings();
       if (!readingsSaved) {
         toast.error('Erro ao salvar leituras de medidores');
@@ -262,43 +242,27 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         return;
       }
       
-      // Generate a billing ID (in a real system, this would be auto-generated by the database)
-      const billingId = `COB-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
-      
-      // Get selected unit details as "101A" format
       const selectedUnitObj = units.find(u => `${u.block}-${u.number}` === unit);
       const unitDisplay = selectedUnitObj ? `${selectedUnitObj.block}${selectedUnitObj.number}` : unit;
       
-      // Create the billing record
       const newBilling = {
-        id: billingId,
         unit: unitDisplay,
         unit_id: unitId,
         resident: resident,
         description: description,
         amount: totalAmount,
-        dueDate: dueDate,
-        status: "pending",
-        isPrinted: false,
-        isSent: false,
-        created_at: new Date().toISOString()
+        due_date: dueDate,
+        status: "pending" as const,
+        is_printed: false,
+        is_sent: false
       };
       
-      // Here we would save to the billing table
       const { error } = await supabase
         .from('billings')
         .insert([newBilling]);
         
       if (error) {
-        if (error.code === '42P01') {
-          // Table doesn't exist yet, warn the user but proceed as if it worked
-          console.warn('Billings table does not exist yet', error);
-          toast.success("Cobrança criada com sucesso!");
-          if (onSave) onSave();
-          onClose();
-        } else {
-          throw error;
-        }
+        throw error;
       } else {
         toast.success("Cobrança criada com sucesso!");
         if (onSave) onSave();
