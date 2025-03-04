@@ -1,0 +1,428 @@
+
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Checkbox } from "@/components/ui/checkbox";
+import { getLatestMeterReading, getCurrentUtilityRate, calculateConsumptionTotal } from "@/utils/consumptionUtils";
+import { toast } from "sonner";
+
+interface NewBillingFormProps {
+  onClose: () => void;
+}
+
+const NewBillingForm = ({ onClose }: NewBillingFormProps) => {
+  const [unit, setUnit] = useState("");
+  const [unitId, setUnitId] = useState<number | null>(null);
+  const [resident, setResident] = useState("");
+  const [chargeType, setChargeType] = useState("fixed");
+  const [fixedChargeType, setFixedChargeType] = useState("condo");
+  const [extraChargeType, setExtraChargeType] = useState("renovation");
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState<number | "">("");
+  const [dueDate, setDueDate] = useState("");
+  
+  // Gas consumption state
+  const [includeGas, setIncludeGas] = useState(false);
+  const [gasPrevious, setGasPrevious] = useState<number | "">("");
+  const [gasCurrent, setGasCurrent] = useState<number | "">("");
+  const [gasRate, setGasRate] = useState<number | "">("");
+  const [gasTotal, setGasTotal] = useState<number>(0);
+  const [isInitialGasReading, setIsInitialGasReading] = useState(true);
+  
+  // Water consumption state
+  const [includeWater, setIncludeWater] = useState(false);
+  const [waterPrevious, setWaterPrevious] = useState<number | "">("");
+  const [waterCurrent, setWaterCurrent] = useState<number | "">("");
+  const [waterRate, setWaterRate] = useState<number | "">("");
+  const [waterTotal, setWaterTotal] = useState<number>(0);
+  const [isInitialWaterReading, setIsInitialWaterReading] = useState(true);
+
+  // Calculate total amount
+  const [totalAmount, setTotalAmount] = useState<number>(0);
+
+  // Effect to calculate gas total
+  useEffect(() => {
+    if (typeof gasPrevious === 'number' && typeof gasCurrent === 'number' && typeof gasRate === 'number') {
+      const { total } = calculateConsumptionTotal(gasPrevious, gasCurrent, gasRate);
+      setGasTotal(total);
+    } else {
+      setGasTotal(0);
+    }
+  }, [gasPrevious, gasCurrent, gasRate]);
+
+  // Effect to calculate water total
+  useEffect(() => {
+    if (typeof waterPrevious === 'number' && typeof waterCurrent === 'number' && typeof waterRate === 'number') {
+      const { total } = calculateConsumptionTotal(waterPrevious, waterCurrent, waterRate);
+      setWaterTotal(total);
+    } else {
+      setWaterTotal(0);
+    }
+  }, [waterPrevious, waterCurrent, waterRate]);
+
+  // Effect to update total amount
+  useEffect(() => {
+    let total = 0;
+    
+    if (typeof amount === 'number') {
+      total += amount;
+    }
+    
+    if (includeGas) {
+      total += gasTotal;
+    }
+    
+    if (includeWater) {
+      total += waterTotal;
+    }
+    
+    setTotalAmount(total);
+  }, [amount, includeGas, gasTotal, includeWater, waterTotal]);
+
+  // Effect to fetch utility rates when checkboxes are checked
+  useEffect(() => {
+    async function fetchRates() {
+      if (includeGas && gasRate === "") {
+        const gasRateData = await getCurrentUtilityRate('gas');
+        if (gasRateData) {
+          setGasRate(gasRateData.rate_per_cubic_meter);
+        }
+      }
+      
+      if (includeWater && waterRate === "") {
+        const waterRateData = await getCurrentUtilityRate('water');
+        if (waterRateData) {
+          setWaterRate(waterRateData.rate_per_cubic_meter);
+        }
+      }
+    }
+    
+    fetchRates();
+  }, [includeGas, includeWater, gasRate, waterRate]);
+
+  // Effect to fetch previous readings when unit changes
+  useEffect(() => {
+    async function fetchPreviousReadings() {
+      if (!unitId) return;
+      
+      if (includeGas && gasPrevious === "") {
+        const latestGasReading = await getLatestMeterReading(unitId, 'gas');
+        if (latestGasReading) {
+          setGasPrevious(latestGasReading.reading_value);
+          setIsInitialGasReading(false);
+        } else {
+          setIsInitialGasReading(true);
+        }
+      }
+      
+      if (includeWater && waterPrevious === "") {
+        const latestWaterReading = await getLatestMeterReading(unitId, 'water');
+        if (latestWaterReading) {
+          setWaterPrevious(latestWaterReading.reading_value);
+          setIsInitialWaterReading(false);
+        } else {
+          setIsInitialWaterReading(true);
+        }
+      }
+    }
+    
+    fetchPreviousReadings();
+  }, [unitId, includeGas, includeWater, gasPrevious, waterPrevious]);
+
+  // Handle unit selection change (in real app would fetch unitId from database)
+  const handleUnitChange = (value: string) => {
+    setUnit(value);
+    // Mock unitId retrieval (in real app, would fetch from database)
+    setUnitId(parseInt(value) || null);
+  };
+
+  const handleSubmit = () => {
+    // Here you would save the billing data to the database
+    toast.success("Cobrança criada com sucesso!");
+    onClose();
+  };
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="unit">Unidade</Label>
+          <Input 
+            id="unit" 
+            placeholder="ex: 101A" 
+            value={unit}
+            onChange={(e) => handleUnitChange(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="resident">Morador</Label>
+          <Input 
+            id="resident" 
+            placeholder="Nome do morador" 
+            value={resident}
+            onChange={(e) => setResident(e.target.value)}
+          />
+        </div>
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="charge-type">Tipo de Cobrança</Label>
+        <Select 
+          defaultValue={chargeType}
+          onValueChange={(value) => setChargeType(value)}
+        >
+          <SelectTrigger id="charge-type">
+            <SelectValue placeholder="Selecione o tipo de cobrança" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fixed">Taxa Fixa</SelectItem>
+            <SelectItem value="consumption">Consumo</SelectItem>
+            <SelectItem value="extra">Taxa Extra</SelectItem>
+            <SelectItem value="custom">Personalizado</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      
+      {chargeType === "fixed" && (
+        <div className="space-y-2">
+          <Label>Taxa Fixa</Label>
+          <Select 
+            defaultValue={fixedChargeType}
+            onValueChange={(value) => setFixedChargeType(value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o tipo de taxa" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="condo">Taxa Condominial</SelectItem>
+              <SelectItem value="reserve">Fundo de Reserva</SelectItem>
+              <SelectItem value="maintenance">Taxa de Manutenção</SelectItem>
+              <SelectItem value="insurance">Seguro</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      
+      {chargeType === "consumption" && (
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="gas">
+            <AccordionTrigger className="flex items-center">
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="include-gas" 
+                  checked={includeGas} 
+                  onCheckedChange={(checked) => setIncludeGas(!!checked)}
+                />
+                <Label htmlFor="include-gas" className="font-normal cursor-pointer">
+                  Consumo de Gás
+                </Label>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              {includeGas && (
+                <div className="space-y-3 pt-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="gas-previous">
+                        {isInitialGasReading ? 'Leitura Inicial' : 'Leitura Anterior'}
+                      </Label>
+                      <Input 
+                        id="gas-previous" 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        value={gasPrevious === "" ? "" : gasPrevious}
+                        onChange={(e) => setGasPrevious(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="gas-current">Leitura Atual</Label>
+                      <Input 
+                        id="gas-current" 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        value={gasCurrent === "" ? "" : gasCurrent}
+                        onChange={(e) => setGasCurrent(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="gas-rate">Taxa por m³ (R$)</Label>
+                      <Input 
+                        id="gas-rate" 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        value={gasRate === "" ? "" : gasRate}
+                        onChange={(e) => setGasRate(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="gas-total">Total (R$)</Label>
+                      <Input 
+                        id="gas-total" 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        value={gasTotal.toFixed(2)}
+                        readOnly 
+                        className="bg-gray-50"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </AccordionContent>
+          </AccordionItem>
+          
+          <AccordionItem value="water">
+            <AccordionTrigger className="flex items-center">
+              <div className="flex items-center gap-2">
+                <Checkbox 
+                  id="include-water" 
+                  checked={includeWater} 
+                  onCheckedChange={(checked) => setIncludeWater(!!checked)}
+                />
+                <Label htmlFor="include-water" className="font-normal cursor-pointer">
+                  Consumo de Água
+                </Label>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              {includeWater && (
+                <div className="space-y-3 pt-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="water-previous">
+                        {isInitialWaterReading ? 'Leitura Inicial' : 'Leitura Anterior'}
+                      </Label>
+                      <Input 
+                        id="water-previous" 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        value={waterPrevious === "" ? "" : waterPrevious}
+                        onChange={(e) => setWaterPrevious(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="water-current">Leitura Atual</Label>
+                      <Input 
+                        id="water-current" 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        value={waterCurrent === "" ? "" : waterCurrent}
+                        onChange={(e) => setWaterCurrent(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="water-rate">Taxa por m³ (R$)</Label>
+                      <Input 
+                        id="water-rate" 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        value={waterRate === "" ? "" : waterRate}
+                        onChange={(e) => setWaterRate(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="water-total">Total (R$)</Label>
+                      <Input 
+                        id="water-total" 
+                        type="number" 
+                        min="0" 
+                        step="0.01" 
+                        value={waterTotal.toFixed(2)}
+                        readOnly 
+                        className="bg-gray-50"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
+      
+      {chargeType === "extra" && (
+        <div className="space-y-2">
+          <Label>Taxa Extra</Label>
+          <Select 
+            defaultValue={extraChargeType}
+            onValueChange={(value) => setExtraChargeType(value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o tipo de taxa extra" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="renovation">Reforma</SelectItem>
+              <SelectItem value="holiday">Festas/Comemorações</SelectItem>
+              <SelectItem value="special">Despesa Especial</SelectItem>
+              <SelectItem value="other">Outro</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      
+      <div className="space-y-2">
+        <Label htmlFor="description">Descrição</Label>
+        <Input 
+          id="description" 
+          placeholder="ex: Taxa Condominial - Janeiro/2024"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="amount">Valor Base (R$)</Label>
+          <Input 
+            id="amount" 
+            type="number" 
+            step="0.01" 
+            min="0" 
+            placeholder="0,00"
+            value={amount === "" ? "" : amount}
+            onChange={(e) => setAmount(e.target.value === "" ? "" : parseFloat(e.target.value))}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="dueDate">Data de Vencimento</Label>
+          <Input 
+            id="dueDate" 
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+        </div>
+      </div>
+      
+      <div className="pt-2 bg-slate-50 p-3 rounded-md mt-2">
+        <div className="flex justify-between items-center">
+          <span className="font-semibold">Valor Total:</span>
+          <span className="text-lg font-bold">
+            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalAmount)}
+          </span>
+        </div>
+      </div>
+      
+      <div className="pt-4 flex justify-end space-x-2">
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+        <Button onClick={handleSubmit}>Salvar Cobrança</Button>
+      </div>
+    </div>
+  );
+};
+
+export default NewBillingForm;
