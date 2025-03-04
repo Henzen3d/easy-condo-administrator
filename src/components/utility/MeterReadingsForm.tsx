@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -209,7 +210,7 @@ export default function MeterReadingsForm() {
             <Label htmlFor="utility-type">Tipo de Consumo</Label>
             <Select 
               value={meterReading.utility_type} 
-              onValueChange={(value) => setMeterReading({...meterReading, utility_type: value})}
+              onValueChange={(value: "gas" | "water") => setMeterReading({...meterReading, utility_type: value})}
             >
               <SelectTrigger id="utility-type">
                 <SelectValue placeholder="Selecione o tipo" />

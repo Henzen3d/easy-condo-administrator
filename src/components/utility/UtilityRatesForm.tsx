@@ -200,7 +200,7 @@ export default function UtilityRatesForm() {
             <Label htmlFor="utility-type">Tipo de Consumo</Label>
             <Select 
               value={newRate.utility_type} 
-              onValueChange={(value) => setNewRate({...newRate, utility_type: value})}
+              onValueChange={(value: "gas" | "water") => setNewRate({...newRate, utility_type: value})}
             >
               <SelectTrigger id="utility-type">
                 <SelectValue placeholder="Selecione o tipo" />
