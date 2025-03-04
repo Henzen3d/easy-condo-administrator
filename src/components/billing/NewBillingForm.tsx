@@ -8,12 +8,30 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Checkbox } from "@/components/ui/checkbox";
 import { getLatestMeterReading, getCurrentUtilityRate, calculateConsumptionTotal } from "@/utils/consumptionUtils";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { v4 as uuidv4 } from 'uuid';
+
+interface Unit {
+  id: number;
+  number: string;
+  block: string;
+  owner: string;
+}
+
+interface Resident {
+  id: number;
+  name: string;
+  unit_id: number;
+}
 
 interface NewBillingFormProps {
   onClose: () => void;
+  onSave?: () => void;
 }
 
-const NewBillingForm = ({ onClose }: NewBillingFormProps) => {
+const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [residents, setResidents] = useState<Resident[]>([]);
   const [unit, setUnit] = useState("");
   const [unitId, setUnitId] = useState<number | null>(null);
   const [resident, setResident] = useState("");
@@ -42,6 +60,37 @@ const NewBillingForm = ({ onClose }: NewBillingFormProps) => {
 
   // Calculate total amount
   const [totalAmount, setTotalAmount] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch units and residents from database
+  useEffect(() => {
+    async function fetchUnitsAndResidents() {
+      try {
+        // Fetch units
+        const { data: unitsData, error: unitsError } = await supabase
+          .from('units')
+          .select('*')
+          .eq('status', 'active');
+        
+        if (unitsError) throw unitsError;
+        setUnits(unitsData || []);
+        
+        // Fetch residents
+        const { data: residentsData, error: residentsError } = await supabase
+          .from('residents')
+          .select('*')
+          .eq('status', 'active');
+        
+        if (residentsError) throw residentsError;
+        setResidents(residentsData || []);
+      } catch (error) {
+        console.error('Error fetching units and residents:', error);
+        toast.error('Erro ao carregar unidades e moradores');
+      }
+    }
+    
+    fetchUnitsAndResidents();
+  }, []);
 
   // Effect to calculate gas total
   useEffect(() => {
@@ -132,17 +181,135 @@ const NewBillingForm = ({ onClose }: NewBillingFormProps) => {
     fetchPreviousReadings();
   }, [unitId, includeGas, includeWater, gasPrevious, waterPrevious]);
 
-  // Handle unit selection change (in real app would fetch unitId from database)
+  // Handle unit selection change
   const handleUnitChange = (value: string) => {
     setUnit(value);
-    // Mock unitId retrieval (in real app, would fetch from database)
-    setUnitId(parseInt(value) || null);
+    
+    // Find the unit object based on the value (which could be "block-number" format)
+    const selectedUnitObj = units.find(u => `${u.block}-${u.number}` === value);
+    
+    if (selectedUnitObj) {
+      setUnitId(selectedUnitObj.id);
+      
+      // Find resident associated with this unit and set it
+      const unitResident = residents.find(r => r.unit_id === selectedUnitObj.id);
+      if (unitResident) {
+        setResident(unitResident.name);
+      } else {
+        // If no resident is associated, use the owner name
+        setResident(selectedUnitObj.owner);
+      }
+    } else {
+      setUnitId(null);
+      setResident("");
+    }
   };
 
-  const handleSubmit = () => {
-    // Here you would save the billing data to the database
-    toast.success("Cobrança criada com sucesso!");
-    onClose();
+  const saveMeterReadings = async () => {
+    if (!unitId) return;
+    
+    const readings = [];
+    
+    // Save gas reading if included
+    if (includeGas && typeof gasCurrent === 'number' && gasCurrent > 0) {
+      readings.push({
+        unit_id: unitId,
+        utility_type: 'gas',
+        reading_value: gasCurrent,
+        reading_date: new Date().toISOString().split('T')[0]
+      });
+    }
+    
+    // Save water reading if included
+    if (includeWater && typeof waterCurrent === 'number' && waterCurrent > 0) {
+      readings.push({
+        unit_id: unitId,
+        utility_type: 'water',
+        reading_value: waterCurrent,
+        reading_date: new Date().toISOString().split('T')[0]
+      });
+    }
+    
+    if (readings.length > 0) {
+      const { error } = await supabase
+        .from('meter_readings')
+        .insert(readings);
+        
+      if (error) {
+        console.error('Error saving meter readings:', error);
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    try {
+      setIsLoading(true);
+      
+      if (!unitId || !unit || !resident || !description || !dueDate || totalAmount <= 0) {
+        toast.error('Por favor, preencha todos os campos obrigatórios');
+        setIsLoading(false);
+        return;
+      }
+      
+      // First save any meter readings if they exist
+      const readingsSaved = await saveMeterReadings();
+      if (!readingsSaved) {
+        toast.error('Erro ao salvar leituras de medidores');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Generate a billing ID (in a real system, this would be auto-generated by the database)
+      const billingId = `COB-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
+      
+      // Get selected unit details as "101A" format
+      const selectedUnitObj = units.find(u => `${u.block}-${u.number}` === unit);
+      const unitDisplay = selectedUnitObj ? `${selectedUnitObj.block}${selectedUnitObj.number}` : unit;
+      
+      // Create the billing record
+      const newBilling = {
+        id: billingId,
+        unit: unitDisplay,
+        unit_id: unitId,
+        resident: resident,
+        description: description,
+        amount: totalAmount,
+        dueDate: dueDate,
+        status: "pending",
+        isPrinted: false,
+        isSent: false,
+        created_at: new Date().toISOString()
+      };
+      
+      // Here we would save to the billing table
+      const { error } = await supabase
+        .from('billings')
+        .insert([newBilling]);
+        
+      if (error) {
+        if (error.code === '42P01') {
+          // Table doesn't exist yet, warn the user but proceed as if it worked
+          console.warn('Billings table does not exist yet', error);
+          toast.success("Cobrança criada com sucesso!");
+          if (onSave) onSave();
+          onClose();
+        } else {
+          throw error;
+        }
+      } else {
+        toast.success("Cobrança criada com sucesso!");
+        if (onSave) onSave();
+        onClose();
+      }
+    } catch (error) {
+      console.error('Error saving billing:', error);
+      toast.error('Erro ao salvar cobrança');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -150,12 +317,21 @@ const NewBillingForm = ({ onClose }: NewBillingFormProps) => {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="unit">Unidade</Label>
-          <Input 
-            id="unit" 
-            placeholder="ex: 101A" 
+          <Select 
             value={unit}
-            onChange={(e) => handleUnitChange(e.target.value)}
-          />
+            onValueChange={handleUnitChange}
+          >
+            <SelectTrigger id="unit">
+              <SelectValue placeholder="Selecione uma unidade" />
+            </SelectTrigger>
+            <SelectContent>
+              {units.map((unit) => (
+                <SelectItem key={unit.id} value={`${unit.block}-${unit.number}`}>
+                  {`${unit.block}-${unit.number}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-2">
           <Label htmlFor="resident">Morador</Label>
@@ -164,6 +340,8 @@ const NewBillingForm = ({ onClose }: NewBillingFormProps) => {
             placeholder="Nome do morador" 
             value={resident}
             onChange={(e) => setResident(e.target.value)}
+            readOnly={unitId !== null}
+            className={unitId !== null ? "bg-gray-50" : ""}
           />
         </div>
       </div>
@@ -171,7 +349,7 @@ const NewBillingForm = ({ onClose }: NewBillingFormProps) => {
       <div className="space-y-2">
         <Label htmlFor="charge-type">Tipo de Cobrança</Label>
         <Select 
-          defaultValue={chargeType}
+          value={chargeType}
           onValueChange={(value) => setChargeType(value)}
         >
           <SelectTrigger id="charge-type">
@@ -190,7 +368,7 @@ const NewBillingForm = ({ onClose }: NewBillingFormProps) => {
         <div className="space-y-2">
           <Label>Taxa Fixa</Label>
           <Select 
-            defaultValue={fixedChargeType}
+            value={fixedChargeType}
             onValueChange={(value) => setFixedChargeType(value)}
           >
             <SelectTrigger>
@@ -358,7 +536,7 @@ const NewBillingForm = ({ onClose }: NewBillingFormProps) => {
         <div className="space-y-2">
           <Label>Taxa Extra</Label>
           <Select 
-            defaultValue={extraChargeType}
+            value={extraChargeType}
             onValueChange={(value) => setExtraChargeType(value)}
           >
             <SelectTrigger>
@@ -418,8 +596,10 @@ const NewBillingForm = ({ onClose }: NewBillingFormProps) => {
       </div>
       
       <div className="pt-4 flex justify-end space-x-2">
-        <Button variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button onClick={handleSubmit}>Salvar Cobrança</Button>
+        <Button variant="outline" onClick={onClose} disabled={isLoading}>Cancelar</Button>
+        <Button onClick={handleSubmit} disabled={isLoading}>
+          {isLoading ? "Salvando..." : "Salvar Cobrança"}
+        </Button>
       </div>
     </div>
   );

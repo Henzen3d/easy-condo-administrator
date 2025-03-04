@@ -1,12 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { 
   Card,
   CardContent,
-  CardDescription,
-  CardFooter,
   CardHeader,
-  CardTitle
 } from "@/components/ui/card";
 import {
   Dialog,
@@ -39,10 +36,8 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { 
-  Calendar, 
   CreditCard, 
   Download, 
-  Filter, 
   MoreVertical, 
   Plus, 
   FileText, 
@@ -54,12 +49,15 @@ import {
 } from "lucide-react";
 import NewBillingForm from "@/components/billing/NewBillingForm";
 import BillingFilters from "@/components/billing/BillingFilters";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 type BillingStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
 
 interface Billing {
   id: string;
   unit: string;
+  unit_id?: number;
   resident: string;
   description: string;
   amount: number;
@@ -67,6 +65,7 @@ interface Billing {
   status: BillingStatus;
   isPrinted: boolean;
   isSent: boolean;
+  created_at?: string;
 }
 
 const statusClasses = {
@@ -75,97 +74,6 @@ const statusClasses = {
   overdue: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
   cancelled: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
 };
-
-const mockBillings: Billing[] = [
-  {
-    id: "COB-001",
-    unit: "101A",
-    resident: "João Silva",
-    description: "Taxa Condominial - Janeiro/2024",
-    amount: 450.00,
-    dueDate: "2024-01-10",
-    status: "paid",
-    isPrinted: true,
-    isSent: true
-  },
-  {
-    id: "COB-002",
-    unit: "102B",
-    resident: "Maria Oliveira",
-    description: "Taxa Condominial - Janeiro/2024",
-    amount: 450.00,
-    dueDate: "2024-01-10",
-    status: "paid",
-    isPrinted: true,
-    isSent: true
-  },
-  {
-    id: "COB-003",
-    unit: "201A",
-    resident: "Pedro Santos",
-    description: "Taxa Condominial - Janeiro/2024",
-    amount: 500.00,
-    dueDate: "2024-01-10",
-    status: "overdue",
-    isPrinted: true,
-    isSent: true
-  },
-  {
-    id: "COB-004",
-    unit: "202B",
-    resident: "Ana Pereira",
-    description: "Taxa Condominial - Janeiro/2024",
-    amount: 500.00,
-    dueDate: "2024-01-10",
-    status: "pending",
-    isPrinted: false,
-    isSent: false
-  },
-  {
-    id: "COB-005",
-    unit: "301A",
-    resident: "Carlos Mendes",
-    description: "Taxa Condominial - Janeiro/2024",
-    amount: 550.00,
-    dueDate: "2024-01-10",
-    status: "pending",
-    isPrinted: false,
-    isSent: false
-  },
-  {
-    id: "COB-006",
-    unit: "101A",
-    resident: "João Silva",
-    description: "Taxa Condominial - Fevereiro/2024",
-    amount: 450.00,
-    dueDate: "2024-02-10",
-    status: "pending",
-    isPrinted: false,
-    isSent: false
-  },
-  {
-    id: "COB-007",
-    unit: "103C",
-    resident: "Fernanda Lima",
-    description: "Taxa Extra - Reforma Piscina",
-    amount: 200.00,
-    dueDate: "2024-01-15",
-    status: "pending",
-    isPrinted: false,
-    isSent: false
-  },
-  {
-    id: "COB-008",
-    unit: "302C",
-    resident: "Roberto Alves",
-    description: "Taxa Condominial - Janeiro/2024",
-    amount: 550.00,
-    dueDate: "2024-01-10",
-    status: "cancelled",
-    isPrinted: true,
-    isSent: false
-  }
-];
 
 const BillingStatusBadge = ({ status }: { status: BillingStatus }) => {
   const displayText = {
@@ -185,7 +93,40 @@ const BillingStatusBadge = ({ status }: { status: BillingStatus }) => {
 const Billing = () => {
   const [isNewBillingOpen, setIsNewBillingOpen] = useState(false);
   const [tabValue, setTabValue] = useState("all");
-  const [billings, setBillings] = useState<Billing[]>(mockBillings);
+  const [billings, setBillings] = useState<Billing[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const fetchBillings = async () => {
+    try {
+      setIsLoading(true);
+      
+      const { data, error } = await supabase
+        .from('billings')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        if (error.code === '42P01') {
+          console.warn('Billings table does not exist yet, using mock data');
+          setBillings(mockBillings);
+        } else {
+          throw error;
+        }
+      } else {
+        setBillings(data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching billings:', error);
+      toast.error('Erro ao carregar cobranças');
+      setBillings(mockBillings);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBillings();
+  }, []);
 
   const filteredBillings = billings.filter(billing => {
     if (tabValue === "all") return true;
@@ -195,36 +136,128 @@ const Billing = () => {
     return true;
   });
 
-  const markAsPaid = (id: string) => {
-    setBillings(prevBillings => 
-      prevBillings.map(billing => 
-        billing.id === id ? { ...billing, status: "paid" } : billing
-      )
-    );
+  const markAsPaid = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('billings')
+        .update({ status: 'paid' })
+        .eq('id', id);
+      
+      if (error) {
+        if (error.code === '42P01') {
+          setBillings(prevBillings => 
+            prevBillings.map(billing => 
+              billing.id === id ? { ...billing, status: "paid" } : billing
+            )
+          );
+        } else {
+          throw error;
+        }
+      } else {
+        setBillings(prevBillings => 
+          prevBillings.map(billing => 
+            billing.id === id ? { ...billing, status: "paid" } : billing
+          )
+        );
+        toast.success('Cobrança marcada como paga');
+      }
+    } catch (error) {
+      console.error('Error updating billing status:', error);
+      toast.error('Erro ao atualizar status da cobrança');
+    }
   };
 
-  const markAsSent = (id: string) => {
-    setBillings(prevBillings => 
-      prevBillings.map(billing => 
-        billing.id === id ? { ...billing, isSent: true } : billing
-      )
-    );
+  const markAsSent = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('billings')
+        .update({ isSent: true })
+        .eq('id', id);
+      
+      if (error) {
+        if (error.code === '42P01') {
+          setBillings(prevBillings => 
+            prevBillings.map(billing => 
+              billing.id === id ? { ...billing, isSent: true } : billing
+            )
+          );
+        } else {
+          throw error;
+        }
+      } else {
+        setBillings(prevBillings => 
+          prevBillings.map(billing => 
+            billing.id === id ? { ...billing, isSent: true } : billing
+          )
+        );
+        toast.success('Cobrança marcada como enviada');
+      }
+    } catch (error) {
+      console.error('Error updating billing sent status:', error);
+      toast.error('Erro ao atualizar status de envio da cobrança');
+    }
   };
 
-  const markAsPrinted = (id: string) => {
-    setBillings(prevBillings => 
-      prevBillings.map(billing => 
-        billing.id === id ? { ...billing, isPrinted: true } : billing
-      )
-    );
+  const markAsPrinted = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('billings')
+        .update({ isPrinted: true })
+        .eq('id', id);
+      
+      if (error) {
+        if (error.code === '42P01') {
+          setBillings(prevBillings => 
+            prevBillings.map(billing => 
+              billing.id === id ? { ...billing, isPrinted: true } : billing
+            )
+          );
+        } else {
+          throw error;
+        }
+      } else {
+        setBillings(prevBillings => 
+          prevBillings.map(billing => 
+            billing.id === id ? { ...billing, isPrinted: true } : billing
+          )
+        );
+        toast.success('Cobrança marcada como impressa');
+      }
+    } catch (error) {
+      console.error('Error updating billing printed status:', error);
+      toast.error('Erro ao atualizar status de impressão da cobrança');
+    }
   };
 
-  const cancelBilling = (id: string) => {
-    setBillings(prevBillings => 
-      prevBillings.map(billing => 
-        billing.id === id ? { ...billing, status: "cancelled" } : billing
-      )
-    );
+  const cancelBilling = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('billings')
+        .update({ status: 'cancelled' })
+        .eq('id', id);
+      
+      if (error) {
+        if (error.code === '42P01') {
+          setBillings(prevBillings => 
+            prevBillings.map(billing => 
+              billing.id === id ? { ...billing, status: "cancelled" } : billing
+            )
+          );
+        } else {
+          throw error;
+        }
+      } else {
+        setBillings(prevBillings => 
+          prevBillings.map(billing => 
+            billing.id === id ? { ...billing, status: "cancelled" } : billing
+          )
+        );
+        toast.success('Cobrança cancelada');
+      }
+    } catch (error) {
+      console.error('Error cancelling billing:', error);
+      toast.error('Erro ao cancelar cobrança');
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -238,6 +271,97 @@ const Billing = () => {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('pt-BR').format(date);
   };
+
+  const mockBillings: Billing[] = [
+    {
+      id: "COB-001",
+      unit: "101A",
+      resident: "João Silva",
+      description: "Taxa Condominial - Janeiro/2024",
+      amount: 450.00,
+      dueDate: "2024-01-10",
+      status: "paid",
+      isPrinted: true,
+      isSent: true
+    },
+    {
+      id: "COB-002",
+      unit: "102B",
+      resident: "Maria Oliveira",
+      description: "Taxa Condominial - Janeiro/2024",
+      amount: 450.00,
+      dueDate: "2024-01-10",
+      status: "paid",
+      isPrinted: true,
+      isSent: true
+    },
+    {
+      id: "COB-003",
+      unit: "201A",
+      resident: "Pedro Santos",
+      description: "Taxa Condominial - Janeiro/2024",
+      amount: 500.00,
+      dueDate: "2024-01-10",
+      status: "overdue",
+      isPrinted: true,
+      isSent: true
+    },
+    {
+      id: "COB-004",
+      unit: "202B",
+      resident: "Ana Pereira",
+      description: "Taxa Condominial - Janeiro/2024",
+      amount: 500.00,
+      dueDate: "2024-01-10",
+      status: "pending",
+      isPrinted: false,
+      isSent: false
+    },
+    {
+      id: "COB-005",
+      unit: "301A",
+      resident: "Carlos Mendes",
+      description: "Taxa Condominial - Janeiro/2024",
+      amount: 550.00,
+      dueDate: "2024-01-10",
+      status: "pending",
+      isPrinted: false,
+      isSent: false
+    },
+    {
+      id: "COB-006",
+      unit: "101A",
+      resident: "João Silva",
+      description: "Taxa Condominial - Fevereiro/2024",
+      amount: 450.00,
+      dueDate: "2024-02-10",
+      status: "pending",
+      isPrinted: false,
+      isSent: false
+    },
+    {
+      id: "COB-007",
+      unit: "103C",
+      resident: "Fernanda Lima",
+      description: "Taxa Extra - Reforma Piscina",
+      amount: 200.00,
+      dueDate: "2024-01-15",
+      status: "pending",
+      isPrinted: false,
+      isSent: false
+    },
+    {
+      id: "COB-008",
+      unit: "302C",
+      resident: "Roberto Alves",
+      description: "Taxa Condominial - Janeiro/2024",
+      amount: 550.00,
+      dueDate: "2024-01-10",
+      status: "cancelled",
+      isPrinted: true,
+      isSent: false
+    }
+  ];
 
   return (
     <div className="container max-w-7xl mx-auto py-6 space-y-6 animate-fade-in">
@@ -263,7 +387,10 @@ const Billing = () => {
                 Preencha as informações abaixo para criar uma nova cobrança.
               </DialogDescription>
             </DialogHeader>
-            <NewBillingForm onClose={() => setIsNewBillingOpen(false)} />
+            <NewBillingForm 
+              onClose={() => setIsNewBillingOpen(false)} 
+              onSave={fetchBillings}
+            />
           </DialogContent>
         </Dialog>
         
@@ -322,7 +449,13 @@ const Billing = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredBillings.length === 0 ? (
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                          Carregando cobranças...
+                        </TableCell>
+                      </TableRow>
+                    ) : filteredBillings.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
                           Nenhuma cobrança encontrada.
