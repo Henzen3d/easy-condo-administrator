@@ -1,6 +1,6 @@
 
 import { useState, useEffect } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { Routes, Route, useLocation, BrowserRouter } from "react-router-dom";
 import { Toaster } from "sonner";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "@/pages/Dashboard";
@@ -15,7 +15,7 @@ import NotFound from "@/pages/NotFound";
 import Index from "@/pages/Index";
 import UtilityManagement from "@/pages/UtilityManagement";
 
-function App() {
+function AppContent() {
   const location = useLocation();
   const [isMounted, setIsMounted] = useState(false);
 
@@ -53,6 +53,14 @@ function App() {
         </>
       )}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 }
 
