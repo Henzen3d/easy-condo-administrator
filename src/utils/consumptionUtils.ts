@@ -4,49 +4,59 @@ import { MeterReading, UtilityRate } from "@/types/consumption";
 
 export async function getLatestMeterReading(unitId: number, utilityType: 'gas' | 'water'): Promise<MeterReading | null> {
   console.log(`Getting latest ${utilityType} reading for unit ${unitId}`);
-  const { data, error } = await supabase
-    .from('meter_readings')
-    .select('*')
-    .eq('unit_id', unitId)
-    .eq('utility_type', utilityType)
-    .order('reading_date', { ascending: false })
-    .limit(1);
+  try {
+    const { data, error } = await supabase
+      .from('meter_readings')
+      .select('*')
+      .eq('unit_id', unitId)
+      .eq('utility_type', utilityType)
+      .order('reading_date', { ascending: false })
+      .limit(1);
 
-  if (error) {
-    console.error(`Error fetching latest ${utilityType} meter reading:`, error);
+    if (error) {
+      console.error(`Error fetching latest ${utilityType} meter reading:`, error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      console.log(`No ${utilityType} readings found for unit ${unitId}`);
+      return null;
+    }
+
+    console.log(`Found ${utilityType} reading:`, data[0]);
+    return data[0] as MeterReading;
+  } catch (error) {
+    console.error(`Exception in getLatestMeterReading for ${utilityType}:`, error);
     return null;
   }
-
-  if (!data || data.length === 0) {
-    console.log(`No ${utilityType} readings found for unit ${unitId}`);
-    return null;
-  }
-
-  console.log(`Found ${utilityType} reading:`, data[0]);
-  return data[0] as MeterReading;
 }
 
 export async function getCurrentUtilityRate(utilityType: 'gas' | 'water'): Promise<UtilityRate | null> {
   console.log(`Getting current ${utilityType} rate`);
-  const { data, error } = await supabase
-    .from('utility_rates')
-    .select('*')
-    .eq('utility_type', utilityType)
-    .order('effective_date', { ascending: false })
-    .limit(1);
+  try {
+    const { data, error } = await supabase
+      .from('utility_rates')
+      .select('*')
+      .eq('utility_type', utilityType)
+      .order('effective_date', { ascending: false })
+      .limit(1);
 
-  if (error) {
-    console.error(`Error fetching current ${utilityType} rate:`, error);
+    if (error) {
+      console.error(`Error fetching current ${utilityType} rate:`, error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      console.log(`No ${utilityType} rates found`);
+      return null;
+    }
+
+    console.log(`Found ${utilityType} rate:`, data[0]);
+    return data[0] as UtilityRate;
+  } catch (error) {
+    console.error(`Exception in getCurrentUtilityRate for ${utilityType}:`, error);
     return null;
   }
-
-  if (!data || data.length === 0) {
-    console.log(`No ${utilityType} rates found`);
-    return null;
-  }
-
-  console.log(`Found ${utilityType} rate:`, data[0]);
-  return data[0] as UtilityRate;
 }
 
 export function calculateConsumptionTotal(
@@ -99,7 +109,6 @@ export async function fetchUnits(): Promise<Unit[]> {
   console.log("Fetching units from database...");
   try {
     // Updated query to fetch all units regardless of status
-    // This helps us see if there's any data at all in the units table
     const { data, error } = await supabase
       .from('units')
       .select('*');
@@ -117,13 +126,16 @@ export async function fetchUnits(): Promise<Unit[]> {
   }
 }
 
-// Update billing status (paid, cancelled, etc.)
+// Update billing status (paid, cancelled, etc.) with improved error handling
 export async function updateBillingStatus(id: string, status: 'pending' | 'paid' | 'overdue' | 'cancelled'): Promise<boolean> {
   try {
     console.log(`Updating billing ${id} status to ${status}`);
     const { error } = await supabase
       .from('billings')
-      .update({ status })
+      .update({ 
+        status,
+        updated_at: new Date().toISOString() 
+      })
       .eq('id', id);
     
     if (error) {
@@ -131,7 +143,7 @@ export async function updateBillingStatus(id: string, status: 'pending' | 'paid'
       return false;
     }
     
-    console.log(`Billing ${id} updated successfully`);
+    console.log(`Billing ${id} updated successfully to status ${status}`);
     return true;
   } catch (error) {
     console.error('Exception while updating billing status:', error);
@@ -139,13 +151,16 @@ export async function updateBillingStatus(id: string, status: 'pending' | 'paid'
   }
 }
 
-// Update billing flags (is_sent, is_printed)
+// Update billing flags (is_sent, is_printed) with improved error handling
 export async function updateBillingFlag(id: string, field: 'is_sent' | 'is_printed', value: boolean): Promise<boolean> {
   try {
     console.log(`Updating billing ${id} ${field} to ${value}`);
     const { error } = await supabase
       .from('billings')
-      .update({ [field]: value })
+      .update({ 
+        [field]: value,
+        updated_at: new Date().toISOString() 
+      })
       .eq('id', id);
     
     if (error) {
@@ -153,7 +168,7 @@ export async function updateBillingFlag(id: string, field: 'is_sent' | 'is_print
       return false;
     }
     
-    console.log(`Billing ${id} ${field} updated successfully`);
+    console.log(`Billing ${id} ${field} updated successfully to ${value}`);
     return true;
   } catch (error) {
     console.error(`Exception while updating billing ${field}:`, error);
@@ -161,7 +176,7 @@ export async function updateBillingFlag(id: string, field: 'is_sent' | 'is_print
   }
 }
 
-// Get a single billing by ID
+// Get a single billing by ID with improved error handling
 export async function getBillingById(id: string): Promise<Billing | null> {
   try {
     console.log(`Fetching billing with id ${id}`);
@@ -169,10 +184,15 @@ export async function getBillingById(id: string): Promise<Billing | null> {
       .from('billings')
       .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();
     
     if (error) {
       console.error('Error fetching billing:', error);
+      return null;
+    }
+    
+    if (!data) {
+      console.log(`No billing found with id ${id}`);
       return null;
     }
     

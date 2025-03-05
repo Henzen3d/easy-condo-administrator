@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { 
   Card,
@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { 
   DropdownMenu,
@@ -46,12 +47,13 @@ import {
   Printer,
   Eye,
   Pencil,
-  Trash2
+  Trash2,
+  AlertCircle
 } from "lucide-react";
+import { toast } from "sonner";
 import NewBillingForm from "@/components/billing/NewBillingForm";
 import BillingFilters from "@/components/billing/BillingFilters";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 // Use type-only import to avoid naming conflicts
 import type { Billing } from "@/utils/consumptionUtils";
 import { 
@@ -108,8 +110,18 @@ const Billing = () => {
   const [selectedBilling, setSelectedBilling] = useState<BillingDisplay | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'pay' | 'send' | 'print' | 'cancel';
+    id: string;
+    title: string;
+    description: string;
+    actionText: string;
+  } | null>(null);
+  const [isActionInProgress, setIsActionInProgress] = useState(false);
 
-  const fetchBillings = async () => {
+  // Memoize fetchBillings to prevent re-renders causing multiple fetches
+  const fetchBillings = useCallback(async () => {
     try {
       setIsLoading(true);
       
@@ -121,8 +133,12 @@ const Billing = () => {
       if (error) {
         console.error('Error fetching billings:', error);
         toast.error('Erro ao carregar cobranças');
-        setBillings(mockBillings.map(transformToDisplayFormat));
-      } else if (data) {
+        // Don't use mock data in production - just show an empty state
+        setBillings([]);
+        return;
+      } 
+      
+      if (data) {
         // Transform database records to display format
         const formattedBillings: BillingDisplay[] = data.map(item => {
           // Ensure the status is one of the allowed types
@@ -136,15 +152,17 @@ const Billing = () => {
         });
         
         setBillings(formattedBillings);
+      } else {
+        setBillings([]);
       }
     } catch (error) {
       console.error('Error fetching billings:', error);
       toast.error('Erro ao carregar cobranças');
-      setBillings(mockBillings.map(transformToDisplayFormat));
+      setBillings([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
   
   // Helper function to validate billing status
   const validateStatus = (status: string): BillingStatus => {
@@ -153,19 +171,10 @@ const Billing = () => {
     }
     return 'pending'; // Default fallback
   };
-  
-  // Helper function to transform Billing to BillingDisplay
-  const transformToDisplayFormat = (billing: Billing): BillingDisplay => {
-    return {
-      ...billing,
-      dueDate: billing.due_date,
-      status: validateStatus(billing.status)
-    };
-  };
 
   useEffect(() => {
     fetchBillings();
-  }, []);
+  }, [fetchBillings]);
 
   const filteredBillings = billings.filter(billing => {
     if (tabValue === "all") return true;
@@ -175,83 +184,85 @@ const Billing = () => {
     return true;
   });
 
-  const markAsPaid = async (id: string) => {
-    try {
-      const result = await updateBillingStatus(id, 'paid');
-      
-      if (result) {
-        setBillings(prevBillings => 
-          prevBillings.map(billing => 
-            billing.id === id ? { ...billing, status: "paid" } : billing
-          )
-        );
-        toast.success('Cobrança marcada como paga');
-      } else {
-        toast.error('Erro ao atualizar status da cobrança');
-      }
-    } catch (error) {
-      console.error('Error updating billing status:', error);
-      toast.error('Erro ao atualizar status da cobrança');
-    }
+  // Improved action handlers with confirmation dialogs
+  const showConfirmAction = (
+    type: 'pay' | 'send' | 'print' | 'cancel', 
+    id: string, 
+    title: string, 
+    description: string,
+    actionText: string
+  ) => {
+    setConfirmAction({ type, id, title, description, actionText });
+    setIsConfirmDialogOpen(true);
   };
 
-  const markAsSent = async (id: string) => {
+  const executeAction = async () => {
+    if (!confirmAction) return;
+    
+    setIsActionInProgress(true);
+    let success = false;
+    
     try {
-      const result = await updateBillingFlag(id, 'is_sent', true);
+      switch (confirmAction.type) {
+        case 'pay':
+          success = await updateBillingStatus(confirmAction.id, 'paid');
+          if (success) {
+            setBillings(prev => 
+              prev.map(billing => 
+                billing.id === confirmAction.id ? { ...billing, status: "paid" } : billing
+              )
+            );
+            toast.success('Cobrança marcada como paga');
+          }
+          break;
+          
+        case 'send':
+          success = await updateBillingFlag(confirmAction.id, 'is_sent', true);
+          if (success) {
+            setBillings(prev => 
+              prev.map(billing => 
+                billing.id === confirmAction.id ? { ...billing, is_sent: true } : billing
+              )
+            );
+            toast.success('Cobrança marcada como enviada');
+          }
+          break;
+          
+        case 'print':
+          success = await updateBillingFlag(confirmAction.id, 'is_printed', true);
+          if (success) {
+            setBillings(prev => 
+              prev.map(billing => 
+                billing.id === confirmAction.id ? { ...billing, is_printed: true } : billing
+              )
+            );
+            toast.success('Cobrança marcada como impressa');
+          }
+          break;
+          
+        case 'cancel':
+          success = await updateBillingStatus(confirmAction.id, 'cancelled');
+          if (success) {
+            setBillings(prev => 
+              prev.map(billing => 
+                billing.id === confirmAction.id ? { ...billing, status: "cancelled" } : billing
+              )
+            );
+            toast.success('Cobrança cancelada');
+          }
+          break;
+      }
       
-      if (result) {
-        setBillings(prevBillings => 
-          prevBillings.map(billing => 
-            billing.id === id ? { ...billing, is_sent: true } : billing
-          )
-        );
-        toast.success('Cobrança marcada como enviada');
-      } else {
-        toast.error('Erro ao atualizar status de envio da cobrança');
+      if (!success) {
+        toast.error(`Erro ao executar ação: ${confirmAction.title}`);
       }
     } catch (error) {
-      console.error('Error updating billing sent status:', error);
-      toast.error('Erro ao atualizar status de envio da cobrança');
-    }
-  };
-
-  const markAsPrinted = async (id: string) => {
-    try {
-      const result = await updateBillingFlag(id, 'is_printed', true);
-      
-      if (result) {
-        setBillings(prevBillings => 
-          prevBillings.map(billing => 
-            billing.id === id ? { ...billing, is_printed: true } : billing
-          )
-        );
-        toast.success('Cobrança marcada como impressa');
-      } else {
-        toast.error('Erro ao atualizar status de impressão da cobrança');
-      }
-    } catch (error) {
-      console.error('Error updating billing printed status:', error);
-      toast.error('Erro ao atualizar status de impressão da cobrança');
-    }
-  };
-
-  const cancelBilling = async (id: string) => {
-    try {
-      const result = await updateBillingStatus(id, 'cancelled');
-      
-      if (result) {
-        setBillings(prevBillings => 
-          prevBillings.map(billing => 
-            billing.id === id ? { ...billing, status: "cancelled" } : billing
-          )
-        );
-        toast.success('Cobrança cancelada');
-      } else {
-        toast.error('Erro ao cancelar cobrança');
-      }
-    } catch (error) {
-      console.error('Error cancelling billing:', error);
-      toast.error('Erro ao cancelar cobrança');
+      console.error('Error executing action:', error);
+      toast.error(`Erro ao executar ação: ${confirmAction.title}`);
+    } finally {
+      setIsActionInProgress(false);
+      setIsConfirmDialogOpen(false);
+      setConfirmAction(null);
     }
   };
 
@@ -262,7 +273,18 @@ const Billing = () => {
         setSelectedBilling(billing);
         setIsViewDialogOpen(true);
       } else {
-        toast.error('Cobrança não encontrada');
+        // Try to fetch it from the database if not in local state
+        const fetchedBilling = await getBillingById(id);
+        if (fetchedBilling) {
+          setSelectedBilling({
+            ...fetchedBilling,
+            dueDate: fetchedBilling.due_date,
+            status: validateStatus(fetchedBilling.status)
+          });
+          setIsViewDialogOpen(true);
+        } else {
+          toast.error('Cobrança não encontrada');
+        }
       }
     } catch (error) {
       console.error('Error viewing billing:', error);
@@ -277,7 +299,18 @@ const Billing = () => {
         setSelectedBilling(billing);
         setIsEditDialogOpen(true);
       } else {
-        toast.error('Cobrança não encontrada');
+        // Try to fetch it from the database if not in local state
+        const fetchedBilling = await getBillingById(id);
+        if (fetchedBilling) {
+          setSelectedBilling({
+            ...fetchedBilling,
+            dueDate: fetchedBilling.due_date,
+            status: validateStatus(fetchedBilling.status)
+          });
+          setIsEditDialogOpen(true);
+        } else {
+          toast.error('Cobrança não encontrada');
+        }
       }
     } catch (error) {
       console.error('Error editing billing:', error);
@@ -296,98 +329,6 @@ const Billing = () => {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('pt-BR').format(date);
   };
-
-  // Mock data using the correct Billing interface structure
-  const mockBillings: Billing[] = [
-    {
-      id: "COB-001",
-      unit: "101A",
-      resident: "João Silva",
-      description: "Taxa Condominial - Janeiro/2024",
-      amount: 450.00,
-      due_date: "2024-01-10",
-      status: "paid",
-      is_printed: true,
-      is_sent: true
-    },
-    {
-      id: "COB-002",
-      unit: "102B",
-      resident: "Maria Oliveira",
-      description: "Taxa Condominial - Janeiro/2024",
-      amount: 450.00,
-      due_date: "2024-01-10",
-      status: "paid",
-      is_printed: true,
-      is_sent: true
-    },
-    {
-      id: "COB-003",
-      unit: "201A",
-      resident: "Pedro Santos",
-      description: "Taxa Condominial - Janeiro/2024",
-      amount: 500.00,
-      due_date: "2024-01-10",
-      status: "overdue",
-      is_printed: true,
-      is_sent: true
-    },
-    {
-      id: "COB-004",
-      unit: "202B",
-      resident: "Ana Pereira",
-      description: "Taxa Condominial - Janeiro/2024",
-      amount: 500.00,
-      due_date: "2024-01-10",
-      status: "pending",
-      is_printed: false,
-      is_sent: false
-    },
-    {
-      id: "COB-005",
-      unit: "301A",
-      resident: "Carlos Mendes",
-      description: "Taxa Condominial - Janeiro/2024",
-      amount: 550.00,
-      due_date: "2024-01-10",
-      status: "pending",
-      is_printed: false,
-      is_sent: false
-    },
-    {
-      id: "COB-006",
-      unit: "101A",
-      resident: "João Silva",
-      description: "Taxa Condominial - Fevereiro/2024",
-      amount: 450.00,
-      due_date: "2024-02-10",
-      status: "pending",
-      is_printed: false,
-      is_sent: false
-    },
-    {
-      id: "COB-007",
-      unit: "103C",
-      resident: "Fernanda Lima",
-      description: "Taxa Extra - Reforma Piscina",
-      amount: 200.00,
-      due_date: "2024-01-15",
-      status: "pending",
-      is_printed: false,
-      is_sent: false
-    },
-    {
-      id: "COB-008",
-      unit: "302C",
-      resident: "Roberto Alves",
-      description: "Taxa Condominial - Janeiro/2024",
-      amount: 550.00,
-      due_date: "2024-01-10",
-      status: "cancelled",
-      is_printed: true,
-      is_sent: false
-    }
-  ];
 
   return (
     <div className="container max-w-7xl mx-auto py-6 space-y-6 animate-fade-in">
@@ -518,7 +459,13 @@ const Billing = () => {
                                 {billing.status !== "paid" && billing.status !== "cancelled" && (
                                   <DropdownMenuItem 
                                     className="cursor-pointer"
-                                    onClick={() => markAsPaid(billing.id)}
+                                    onClick={() => showConfirmAction(
+                                      'pay',
+                                      billing.id, 
+                                      'Marcar como Pago', 
+                                      'Tem certeza que deseja marcar esta cobrança como paga?',
+                                      'Marcar como Pago'
+                                    )}
                                   >
                                     <CreditCard className="mr-2 h-4 w-4" />
                                     <span>Marcar como Pago</span>
@@ -528,7 +475,13 @@ const Billing = () => {
                                 {!billing.is_sent && billing.status !== "cancelled" && (
                                   <DropdownMenuItem 
                                     className="cursor-pointer"
-                                    onClick={() => markAsSent(billing.id)}
+                                    onClick={() => showConfirmAction(
+                                      'send',
+                                      billing.id, 
+                                      'Marcar como Enviado', 
+                                      'Tem certeza que deseja marcar esta cobrança como enviada?',
+                                      'Marcar como Enviado'
+                                    )}
                                   >
                                     <Send className="mr-2 h-4 w-4" />
                                     <span>Marcar como Enviado</span>
@@ -538,7 +491,13 @@ const Billing = () => {
                                 {!billing.is_printed && billing.status !== "cancelled" && (
                                   <DropdownMenuItem 
                                     className="cursor-pointer"
-                                    onClick={() => markAsPrinted(billing.id)}
+                                    onClick={() => showConfirmAction(
+                                      'print',
+                                      billing.id, 
+                                      'Marcar como Impresso', 
+                                      'Tem certeza que deseja marcar esta cobrança como impressa?',
+                                      'Marcar como Impresso'
+                                    )}
                                   >
                                     <Printer className="mr-2 h-4 w-4" />
                                     <span>Marcar como Impresso</span>
@@ -560,7 +519,13 @@ const Billing = () => {
                                 {billing.status !== "cancelled" && (
                                   <DropdownMenuItem 
                                     className="cursor-pointer text-destructive"
-                                    onClick={() => cancelBilling(billing.id)}
+                                    onClick={() => showConfirmAction(
+                                      'cancel',
+                                      billing.id, 
+                                      'Cancelar Cobrança', 
+                                      'Tem certeza que deseja cancelar esta cobrança? Esta ação não pode ser desfeita.',
+                                      'Cancelar'
+                                    )}
                                   >
                                     <Trash2 className="mr-2 h-4 w-4" />
                                     <span>Cancelar Cobrança</span>
@@ -580,11 +545,41 @@ const Billing = () => {
         </div>
       </div>
 
+      {/* Confirmation Dialog */}
+      <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{confirmAction?.title}</DialogTitle>
+            <DialogDescription>
+              {confirmAction?.description}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex space-x-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setIsConfirmDialogOpen(false)}
+              disabled={isActionInProgress}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={executeAction}
+              disabled={isActionInProgress}
+            >
+              {isActionInProgress ? "Processando..." : confirmAction?.actionText}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Billing View Dialog */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Detalhes da Cobrança</DialogTitle>
+            <DialogDescription>
+              Visualize os detalhes desta cobrança.
+            </DialogDescription>
           </DialogHeader>
           {selectedBilling && (
             <div className="space-y-4">
