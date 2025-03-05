@@ -57,16 +57,25 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
 
   const [totalAmount, setTotalAmount] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingUnits, setIsLoadingUnits] = useState(true);
 
   useEffect(() => {
     async function fetchUnitsAndResidents() {
       try {
+        setIsLoadingUnits(true);
+        console.log("Fetching units and residents...");
+        
         const { data: unitsData, error: unitsError } = await supabase
           .from('units')
           .select('*')
           .eq('status', 'active');
         
-        if (unitsError) throw unitsError;
+        if (unitsError) {
+          console.error('Error fetching units:', unitsError);
+          throw unitsError;
+        }
+        
+        console.log("Units data fetched:", unitsData);
         setUnits(unitsData || []);
         
         const { data: residentsData, error: residentsError } = await supabase
@@ -74,11 +83,18 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
           .select('*')
           .eq('status', 'active');
         
-        if (residentsError) throw residentsError;
+        if (residentsError) {
+          console.error('Error fetching residents:', residentsError);
+          throw residentsError;
+        }
+        
+        console.log("Residents data fetched:", residentsData);
         setResidents(residentsData || []);
       } catch (error) {
         console.error('Error fetching units and residents:', error);
         toast.error('Erro ao carregar unidades e moradores');
+      } finally {
+        setIsLoadingUnits(false);
       }
     }
     
@@ -144,43 +160,54 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
   useEffect(() => {
     async function fetchPreviousReadings() {
       if (!unitId) return;
+      console.log("Fetching previous readings for unit ID:", unitId);
       
-      if (includeGas && gasPrevious === "") {
+      if (includeGas) {
         const latestGasReading = await getLatestMeterReading(unitId, 'gas');
+        console.log("Latest gas reading:", latestGasReading);
         if (latestGasReading) {
           setGasPrevious(latestGasReading.reading_value);
           setIsInitialGasReading(false);
         } else {
+          setGasPrevious("");
           setIsInitialGasReading(true);
         }
       }
       
-      if (includeWater && waterPrevious === "") {
+      if (includeWater) {
         const latestWaterReading = await getLatestMeterReading(unitId, 'water');
+        console.log("Latest water reading:", latestWaterReading);
         if (latestWaterReading) {
           setWaterPrevious(latestWaterReading.reading_value);
           setIsInitialWaterReading(false);
         } else {
+          setWaterPrevious("");
           setIsInitialWaterReading(true);
         }
       }
     }
     
     fetchPreviousReadings();
-  }, [unitId, includeGas, includeWater, gasPrevious, waterPrevious]);
+  }, [unitId, includeGas, includeWater]);
 
   const handleUnitChange = (value: string) => {
+    console.log("Unit selected:", value);
     setUnit(value);
     
-    const selectedUnitObj = units.find(u => `${u.block}-${u.number}` === value);
+    const selectedUnitObj = units.find(u => `${u.block}${u.number}` === value);
+    console.log("Selected unit object:", selectedUnitObj);
     
     if (selectedUnitObj) {
       setUnitId(selectedUnitObj.id);
       
+      // First check if there's a resident associated with this unit
       const unitResident = residents.find(r => r.unit_id === selectedUnitObj.id);
       if (unitResident) {
+        console.log("Found resident for unit:", unitResident);
         setResident(unitResident.name);
       } else {
+        // If no resident found, use the owner's name
+        console.log("No resident found, using owner:", selectedUnitObj.owner);
         setResident(selectedUnitObj.owner);
       }
     } else {
@@ -213,6 +240,7 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     }
     
     if (readings.length > 0) {
+      console.log("Saving meter readings:", readings);
       const { error } = await supabase
         .from('meter_readings')
         .insert(readings);
@@ -243,7 +271,7 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         return;
       }
       
-      const selectedUnitObj = units.find(u => `${u.block}-${u.number}` === unit);
+      const selectedUnitObj = units.find(u => `${u.block}${u.number}` === unit);
       const unitDisplay = selectedUnitObj ? `${selectedUnitObj.block}${selectedUnitObj.number}` : unit;
       
       // Update the new billing object to match the Billing interface
@@ -259,11 +287,13 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         is_sent: false
       };
       
+      console.log("Creating new billing:", newBilling);
       const { error } = await supabase
         .from('billings')
         .insert([newBilling]);
         
       if (error) {
+        console.error('Error saving billing:', error);
         throw error;
       } else {
         toast.success("Cobrança criada com sucesso!");
@@ -288,14 +318,18 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
             onValueChange={handleUnitChange}
           >
             <SelectTrigger id="unit">
-              <SelectValue placeholder="Selecione uma unidade" />
+              <SelectValue placeholder={isLoadingUnits ? "Carregando unidades..." : "Selecione uma unidade"} />
             </SelectTrigger>
             <SelectContent>
-              {units.map((unit) => (
-                <SelectItem key={unit.id} value={`${unit.block}-${unit.number}`}>
-                  {`${unit.block}-${unit.number}`}
-                </SelectItem>
-              ))}
+              {units.length === 0 && !isLoadingUnits ? (
+                <SelectItem value="no-units" disabled>Nenhuma unidade encontrada</SelectItem>
+              ) : (
+                units.map((unit) => (
+                  <SelectItem key={unit.id} value={`${unit.block}${unit.number}`}>
+                    {`${unit.block}${unit.number}`}
+                  </SelectItem>
+                ))
+              )}
             </SelectContent>
           </Select>
         </div>

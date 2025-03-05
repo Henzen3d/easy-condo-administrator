@@ -1,7 +1,9 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { MeterReading, UtilityRate } from "@/types/consumption";
 
 export async function getLatestMeterReading(unitId: number, utilityType: 'gas' | 'water'): Promise<MeterReading | null> {
+  console.log(`Getting latest ${utilityType} reading for unit ${unitId}`);
   const { data, error } = await supabase
     .from('meter_readings')
     .select('*')
@@ -10,15 +12,22 @@ export async function getLatestMeterReading(unitId: number, utilityType: 'gas' |
     .order('reading_date', { ascending: false })
     .limit(1);
 
-  if (error || !data || data.length === 0) {
-    console.error("Error fetching latest meter reading:", error);
+  if (error) {
+    console.error(`Error fetching latest ${utilityType} meter reading:`, error);
     return null;
   }
 
+  if (!data || data.length === 0) {
+    console.log(`No ${utilityType} readings found for unit ${unitId}`);
+    return null;
+  }
+
+  console.log(`Found ${utilityType} reading:`, data[0]);
   return data[0] as MeterReading;
 }
 
 export async function getCurrentUtilityRate(utilityType: 'gas' | 'water'): Promise<UtilityRate | null> {
+  console.log(`Getting current ${utilityType} rate`);
   const { data, error } = await supabase
     .from('utility_rates')
     .select('*')
@@ -26,11 +35,17 @@ export async function getCurrentUtilityRate(utilityType: 'gas' | 'water'): Promi
     .order('effective_date', { ascending: false })
     .limit(1);
 
-  if (error || !data || data.length === 0) {
-    console.error("Error fetching current utility rate:", error);
+  if (error) {
+    console.error(`Error fetching current ${utilityType} rate:`, error);
     return null;
   }
 
+  if (!data || data.length === 0) {
+    console.log(`No ${utilityType} rates found`);
+    return null;
+  }
+
+  console.log(`Found ${utilityType} rate:`, data[0]);
   return data[0] as UtilityRate;
 }
 
@@ -40,12 +55,14 @@ export function calculateConsumptionTotal(
   rate: number
 ): { consumption: number, total: number } {
   if (isNaN(previous) || isNaN(current) || isNaN(rate) || current < previous) {
+    console.log("Invalid consumption calculation inputs:", { previous, current, rate });
     return { consumption: 0, total: 0 };
   }
   
   const consumption = current - previous;
   const total = consumption * rate;
   
+  console.log("Consumption calculation:", { previous, current, consumption, rate, total });
   return { consumption, total };
 }
 
