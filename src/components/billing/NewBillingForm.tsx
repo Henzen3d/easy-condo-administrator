@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,14 +65,21 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         setIsLoadingUnits(true);
         console.log("Fetching units and residents...");
         
+        // Fetch units data
         const unitsData = await fetchUnits();
         console.log("Units data fetched:", unitsData);
+        
+        if (unitsData.length === 0) {
+          // Log a more specific message if no units were found
+          console.log("No units found in the database. This could indicate an empty table or permissions issue.");
+        }
+        
         setUnits(unitsData);
         
+        // Fetch residents data
         const { data: residentsData, error: residentsError } = await supabase
           .from('residents')
-          .select('*')
-          .eq('status', 'active');
+          .select('*');
         
         if (residentsError) {
           console.error('Error fetching residents:', residentsError);
@@ -193,13 +201,15 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
       console.log("Selected unit object:", selectedUnitObj);
       
       if (selectedUnitObj) {
+        // Auto-fill the resident field with the unit owner
+        console.log("Setting resident to owner:", selectedUnitObj.owner);
+        setResident(selectedUnitObj.owner);
+        
+        // Check if there is a resident assigned to this unit
         const unitResident = residents.find(r => r.unit_id === selectedUnitObj.id);
         if (unitResident) {
           console.log("Found resident for unit:", unitResident);
           setResident(unitResident.name);
-        } else {
-          console.log("No resident found, using owner:", selectedUnitObj.owner);
-          setResident(selectedUnitObj.owner);
         }
       }
     } else {

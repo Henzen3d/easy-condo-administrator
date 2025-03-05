@@ -98,10 +98,11 @@ export interface Unit {
 export async function fetchUnits(): Promise<Unit[]> {
   console.log("Fetching units from database...");
   try {
+    // Updated query to fetch all units regardless of status
+    // This helps us see if there's any data at all in the units table
     const { data, error } = await supabase
       .from('units')
-      .select('*')
-      .eq('status', 'active');
+      .select('*');
     
     if (error) {
       console.error('Error fetching units:', error);
