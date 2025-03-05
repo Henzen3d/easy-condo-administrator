@@ -81,3 +81,37 @@ export interface Billing {
   created_at?: string | null;
   updated_at?: string | null;
 }
+
+// Type definition for the Unit interface that matches the units table
+export interface Unit {
+  id: number;
+  number: string;
+  block: string;
+  owner: string;
+  residents: number;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+// Fetch all units from the database
+export async function fetchUnits(): Promise<Unit[]> {
+  console.log("Fetching units from database...");
+  try {
+    const { data, error } = await supabase
+      .from('units')
+      .select('*')
+      .eq('status', 'active');
+    
+    if (error) {
+      console.error('Error fetching units:', error);
+      return [];
+    }
+    
+    console.log("Units fetched:", data);
+    return data || [];
+  } catch (error) {
+    console.error('Exception while fetching units:', error);
+    return [];
+  }
+}

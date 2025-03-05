@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,16 +5,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getLatestMeterReading, getCurrentUtilityRate, calculateConsumptionTotal, Billing } from "@/utils/consumptionUtils";
+import { 
+  getLatestMeterReading, 
+  getCurrentUtilityRate, 
+  calculateConsumptionTotal, 
+  Billing,
+  fetchUnits,
+  Unit
+} from "@/utils/consumptionUtils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-
-interface Unit {
-  id: number;
-  number: string;
-  block: string;
-  owner: string;
-}
 
 interface Resident {
   id: number;
@@ -65,18 +64,9 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         setIsLoadingUnits(true);
         console.log("Fetching units and residents...");
         
-        const { data: unitsData, error: unitsError } = await supabase
-          .from('units')
-          .select('*')
-          .eq('status', 'active');
-        
-        if (unitsError) {
-          console.error('Error fetching units:', unitsError);
-          throw unitsError;
-        }
-        
+        const unitsData = await fetchUnits();
         console.log("Units data fetched:", unitsData);
-        setUnits(unitsData || []);
+        setUnits(unitsData);
         
         const { data: residentsData, error: residentsError } = await supabase
           .from('residents')
@@ -194,21 +184,23 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     console.log("Unit selected:", value);
     setUnit(value);
     
-    const selectedUnitObj = units.find(u => `${u.block}${u.number}` === value);
-    console.log("Selected unit object:", selectedUnitObj);
+    const unitId = parseInt(value);
     
-    if (selectedUnitObj) {
-      setUnitId(selectedUnitObj.id);
+    if (!isNaN(unitId)) {
+      setUnitId(unitId);
       
-      // First check if there's a resident associated with this unit
-      const unitResident = residents.find(r => r.unit_id === selectedUnitObj.id);
-      if (unitResident) {
-        console.log("Found resident for unit:", unitResident);
-        setResident(unitResident.name);
-      } else {
-        // If no resident found, use the owner's name
-        console.log("No resident found, using owner:", selectedUnitObj.owner);
-        setResident(selectedUnitObj.owner);
+      const selectedUnitObj = units.find(u => u.id === unitId);
+      console.log("Selected unit object:", selectedUnitObj);
+      
+      if (selectedUnitObj) {
+        const unitResident = residents.find(r => r.unit_id === selectedUnitObj.id);
+        if (unitResident) {
+          console.log("Found resident for unit:", unitResident);
+          setResident(unitResident.name);
+        } else {
+          console.log("No resident found, using owner:", selectedUnitObj.owner);
+          setResident(selectedUnitObj.owner);
+        }
       }
     } else {
       setUnitId(null);
@@ -271,10 +263,9 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         return;
       }
       
-      const selectedUnitObj = units.find(u => `${u.block}${u.number}` === unit);
+      const selectedUnitObj = units.find(u => u.id === unitId);
       const unitDisplay = selectedUnitObj ? `${selectedUnitObj.block}${selectedUnitObj.number}` : unit;
       
-      // Update the new billing object to match the Billing interface
       const newBilling: Omit<Billing, 'id'> = {
         unit: unitDisplay,
         unit_id: unitId,
@@ -325,7 +316,7 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
                 <SelectItem value="no-units" disabled>Nenhuma unidade encontrada</SelectItem>
               ) : (
                 units.map((unit) => (
-                  <SelectItem key={unit.id} value={`${unit.block}${unit.number}`}>
+                  <SelectItem key={unit.id} value={unit.id.toString()}>
                     {`${unit.block}${unit.number}`}
                   </SelectItem>
                 ))
