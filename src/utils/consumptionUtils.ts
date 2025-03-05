@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { MeterReading, UtilityRate } from "@/types/consumption";
 
@@ -50,11 +49,11 @@ export function calculateConsumptionTotal(
   return { consumption, total };
 }
 
-// Add a type definition for the Billing interface that matches the database schema
+// Type definition for the Billing interface that matches the database schema
 export interface Billing {
   id: string;
   unit: string;
-  unit_id?: number;
+  unit_id?: number | null;
   resident: string;
   description: string;
   amount: number;
@@ -62,6 +61,6 @@ export interface Billing {
   status: 'pending' | 'paid' | 'overdue' | 'cancelled';
   is_printed: boolean;
   is_sent: boolean;
-  created_at?: string;
-  updated_at?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
 }

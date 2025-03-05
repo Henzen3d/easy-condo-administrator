@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { 
@@ -51,12 +52,25 @@ import NewBillingForm from "@/components/billing/NewBillingForm";
 import BillingFilters from "@/components/billing/BillingFilters";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Billing } from "@/utils/consumptionUtils";
+// Use type-only import to avoid naming conflicts
+import type { Billing } from "@/utils/consumptionUtils";
 
 type BillingStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
 
-interface BillingDisplay extends Omit<Billing, 'due_date'> {
-  dueDate: string;
+// Create a display interface that maps database fields to display-friendly names
+interface BillingDisplay {
+  id: string;
+  unit: string;
+  unit_id?: number | null;
+  resident: string;
+  description: string;
+  amount: number;
+  dueDate: string; // Frontend property mapping to due_date
+  status: BillingStatus;
+  is_printed: boolean; // Use database naming convention
+  is_sent: boolean; // Use database naming convention
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 const statusClasses = {
@@ -99,23 +113,46 @@ const Billing = () => {
       if (error) {
         console.error('Error fetching billings:', error);
         toast.error('Erro ao carregar cobranças');
-        setBillings(mockBillings);
+        setBillings(mockBillings.map(transformToDisplayFormat));
       } else if (data) {
-        const formattedBillings: BillingDisplay[] = data.map(item => ({
-          ...item,
-          dueDate: item.due_date,
-          isPrinted: item.is_printed,
-          isSent: item.is_sent
-        }));
+        // Transform database records to display format
+        const formattedBillings: BillingDisplay[] = data.map(item => {
+          // Ensure the status is one of the allowed types
+          const status = validateStatus(item.status);
+          
+          return {
+            ...item,
+            dueDate: item.due_date,
+            status: status,
+          };
+        });
+        
         setBillings(formattedBillings);
       }
     } catch (error) {
       console.error('Error fetching billings:', error);
       toast.error('Erro ao carregar cobranças');
-      setBillings(mockBillings);
+      setBillings(mockBillings.map(transformToDisplayFormat));
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  // Helper function to validate billing status
+  const validateStatus = (status: string): BillingStatus => {
+    if (status === 'pending' || status === 'paid' || status === 'overdue' || status === 'cancelled') {
+      return status;
+    }
+    return 'pending'; // Default fallback
+  };
+  
+  // Helper function to transform Billing to BillingDisplay
+  const transformToDisplayFormat = (billing: Billing): BillingDisplay => {
+    return {
+      ...billing,
+      dueDate: billing.due_date,
+      status: validateStatus(billing.status)
+    };
   };
 
   useEffect(() => {
@@ -165,7 +202,7 @@ const Billing = () => {
       } else {
         setBillings(prevBillings => 
           prevBillings.map(billing => 
-            billing.id === id ? { ...billing, isSent: true } : billing
+            billing.id === id ? { ...billing, is_sent: true } : billing
           )
         );
         toast.success('Cobrança marcada como enviada');
@@ -188,7 +225,7 @@ const Billing = () => {
       } else {
         setBillings(prevBillings => 
           prevBillings.map(billing => 
-            billing.id === id ? { ...billing, isPrinted: true } : billing
+            billing.id === id ? { ...billing, is_printed: true } : billing
           )
         );
         toast.success('Cobrança marcada como impressa');
@@ -234,6 +271,7 @@ const Billing = () => {
     return new Intl.DateTimeFormat('pt-BR').format(date);
   };
 
+  // Mock data using the correct Billing interface structure
   const mockBillings: Billing[] = [
     {
       id: "COB-001",
@@ -241,10 +279,10 @@ const Billing = () => {
       resident: "João Silva",
       description: "Taxa Condominial - Janeiro/2024",
       amount: 450.00,
-      dueDate: "2024-01-10",
+      due_date: "2024-01-10",
       status: "paid",
-      isPrinted: true,
-      isSent: true
+      is_printed: true,
+      is_sent: true
     },
     {
       id: "COB-002",
@@ -252,10 +290,10 @@ const Billing = () => {
       resident: "Maria Oliveira",
       description: "Taxa Condominial - Janeiro/2024",
       amount: 450.00,
-      dueDate: "2024-01-10",
+      due_date: "2024-01-10",
       status: "paid",
-      isPrinted: true,
-      isSent: true
+      is_printed: true,
+      is_sent: true
     },
     {
       id: "COB-003",
@@ -263,10 +301,10 @@ const Billing = () => {
       resident: "Pedro Santos",
       description: "Taxa Condominial - Janeiro/2024",
       amount: 500.00,
-      dueDate: "2024-01-10",
+      due_date: "2024-01-10",
       status: "overdue",
-      isPrinted: true,
-      isSent: true
+      is_printed: true,
+      is_sent: true
     },
     {
       id: "COB-004",
@@ -274,10 +312,10 @@ const Billing = () => {
       resident: "Ana Pereira",
       description: "Taxa Condominial - Janeiro/2024",
       amount: 500.00,
-      dueDate: "2024-01-10",
+      due_date: "2024-01-10",
       status: "pending",
-      isPrinted: false,
-      isSent: false
+      is_printed: false,
+      is_sent: false
     },
     {
       id: "COB-005",
@@ -285,10 +323,10 @@ const Billing = () => {
       resident: "Carlos Mendes",
       description: "Taxa Condominial - Janeiro/2024",
       amount: 550.00,
-      dueDate: "2024-01-10",
+      due_date: "2024-01-10",
       status: "pending",
-      isPrinted: false,
-      isSent: false
+      is_printed: false,
+      is_sent: false
     },
     {
       id: "COB-006",
@@ -296,10 +334,10 @@ const Billing = () => {
       resident: "João Silva",
       description: "Taxa Condominial - Fevereiro/2024",
       amount: 450.00,
-      dueDate: "2024-02-10",
+      due_date: "2024-02-10",
       status: "pending",
-      isPrinted: false,
-      isSent: false
+      is_printed: false,
+      is_sent: false
     },
     {
       id: "COB-007",
@@ -307,10 +345,10 @@ const Billing = () => {
       resident: "Fernanda Lima",
       description: "Taxa Extra - Reforma Piscina",
       amount: 200.00,
-      dueDate: "2024-01-15",
+      due_date: "2024-01-15",
       status: "pending",
-      isPrinted: false,
-      isSent: false
+      is_printed: false,
+      is_sent: false
     },
     {
       id: "COB-008",
@@ -318,10 +356,10 @@ const Billing = () => {
       resident: "Roberto Alves",
       description: "Taxa Condominial - Janeiro/2024",
       amount: 550.00,
-      dueDate: "2024-01-10",
+      due_date: "2024-01-10",
       status: "cancelled",
-      isPrinted: true,
-      isSent: false
+      is_printed: true,
+      is_sent: false
     }
   ];
 
@@ -461,7 +499,7 @@ const Billing = () => {
                                   </DropdownMenuItem>
                                 )}
                                 
-                                {!billing.isSent && billing.status !== "cancelled" && (
+                                {!billing.is_sent && billing.status !== "cancelled" && (
                                   <DropdownMenuItem 
                                     className="cursor-pointer"
                                     onClick={() => markAsSent(billing.id)}
@@ -471,7 +509,7 @@ const Billing = () => {
                                   </DropdownMenuItem>
                                 )}
                                 
-                                {!billing.isPrinted && billing.status !== "cancelled" && (
+                                {!billing.is_printed && billing.status !== "cancelled" && (
                                   <DropdownMenuItem 
                                     className="cursor-pointer"
                                     onClick={() => markAsPrinted(billing.id)}

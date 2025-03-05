@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -245,14 +246,15 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
       const selectedUnitObj = units.find(u => `${u.block}-${u.number}` === unit);
       const unitDisplay = selectedUnitObj ? `${selectedUnitObj.block}${selectedUnitObj.number}` : unit;
       
-      const newBilling = {
+      // Update the new billing object to match the Billing interface
+      const newBilling: Omit<Billing, 'id'> = {
         unit: unitDisplay,
         unit_id: unitId,
         resident: resident,
         description: description,
         amount: totalAmount,
         due_date: dueDate,
-        status: "pending" as const,
+        status: "pending",
         is_printed: false,
         is_sent: false
       };
