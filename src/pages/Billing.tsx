@@ -54,6 +54,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 // Use type-only import to avoid naming conflicts
 import type { Billing } from "@/utils/consumptionUtils";
+import { 
+  updateBillingStatus, 
+  updateBillingFlag, 
+  getBillingById 
+} from "@/utils/consumptionUtils";
 
 type BillingStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
 
@@ -100,6 +105,9 @@ const Billing = () => {
   const [tabValue, setTabValue] = useState("all");
   const [billings, setBillings] = useState<BillingDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedBilling, setSelectedBilling] = useState<BillingDisplay | null>(null);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
   const fetchBillings = async () => {
     try {
@@ -169,20 +177,17 @@ const Billing = () => {
 
   const markAsPaid = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('billings')
-        .update({ status: 'paid' })
-        .eq('id', id);
+      const result = await updateBillingStatus(id, 'paid');
       
-      if (error) {
-        throw error;
-      } else {
+      if (result) {
         setBillings(prevBillings => 
           prevBillings.map(billing => 
             billing.id === id ? { ...billing, status: "paid" } : billing
           )
         );
         toast.success('Cobrança marcada como paga');
+      } else {
+        toast.error('Erro ao atualizar status da cobrança');
       }
     } catch (error) {
       console.error('Error updating billing status:', error);
@@ -192,20 +197,17 @@ const Billing = () => {
 
   const markAsSent = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('billings')
-        .update({ is_sent: true })
-        .eq('id', id);
+      const result = await updateBillingFlag(id, 'is_sent', true);
       
-      if (error) {
-        throw error;
-      } else {
+      if (result) {
         setBillings(prevBillings => 
           prevBillings.map(billing => 
             billing.id === id ? { ...billing, is_sent: true } : billing
           )
         );
         toast.success('Cobrança marcada como enviada');
+      } else {
+        toast.error('Erro ao atualizar status de envio da cobrança');
       }
     } catch (error) {
       console.error('Error updating billing sent status:', error);
@@ -215,20 +217,17 @@ const Billing = () => {
 
   const markAsPrinted = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('billings')
-        .update({ is_printed: true })
-        .eq('id', id);
+      const result = await updateBillingFlag(id, 'is_printed', true);
       
-      if (error) {
-        throw error;
-      } else {
+      if (result) {
         setBillings(prevBillings => 
           prevBillings.map(billing => 
             billing.id === id ? { ...billing, is_printed: true } : billing
           )
         );
         toast.success('Cobrança marcada como impressa');
+      } else {
+        toast.error('Erro ao atualizar status de impressão da cobrança');
       }
     } catch (error) {
       console.error('Error updating billing printed status:', error);
@@ -238,24 +237,51 @@ const Billing = () => {
 
   const cancelBilling = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('billings')
-        .update({ status: 'cancelled' })
-        .eq('id', id);
+      const result = await updateBillingStatus(id, 'cancelled');
       
-      if (error) {
-        throw error;
-      } else {
+      if (result) {
         setBillings(prevBillings => 
           prevBillings.map(billing => 
             billing.id === id ? { ...billing, status: "cancelled" } : billing
           )
         );
         toast.success('Cobrança cancelada');
+      } else {
+        toast.error('Erro ao cancelar cobrança');
       }
     } catch (error) {
       console.error('Error cancelling billing:', error);
       toast.error('Erro ao cancelar cobrança');
+    }
+  };
+
+  const viewBilling = async (id: string) => {
+    try {
+      const billing = billings.find(b => b.id === id);
+      if (billing) {
+        setSelectedBilling(billing);
+        setIsViewDialogOpen(true);
+      } else {
+        toast.error('Cobrança não encontrada');
+      }
+    } catch (error) {
+      console.error('Error viewing billing:', error);
+      toast.error('Erro ao visualizar cobrança');
+    }
+  };
+
+  const editBilling = async (id: string) => {
+    try {
+      const billing = billings.find(b => b.id === id);
+      if (billing) {
+        setSelectedBilling(billing);
+        setIsEditDialogOpen(true);
+      } else {
+        toast.error('Cobrança não encontrada');
+      }
+    } catch (error) {
+      console.error('Error editing billing:', error);
+      toast.error('Erro ao editar cobrança');
     }
   };
 
@@ -483,7 +509,7 @@ const Billing = () => {
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem 
                                   className="cursor-pointer"
-                                  onClick={() => {}}
+                                  onClick={() => viewBilling(billing.id)}
                                 >
                                   <Eye className="mr-2 h-4 w-4" />
                                   <span>Visualizar</span>
@@ -519,7 +545,10 @@ const Billing = () => {
                                   </DropdownMenuItem>
                                 )}
                                 
-                                <DropdownMenuItem className="cursor-pointer">
+                                <DropdownMenuItem 
+                                  className="cursor-pointer"
+                                  onClick={() => editBilling(billing.id)}
+                                >
                                   <Pencil className="mr-2 h-4 w-4" />
                                   <span>Editar</span>
                                 </DropdownMenuItem>
@@ -550,6 +579,100 @@ const Billing = () => {
           </Card>
         </div>
       </div>
+
+      {/* Billing View Dialog */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Cobrança</DialogTitle>
+          </DialogHeader>
+          {selectedBilling && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">ID</p>
+                  <p>{selectedBilling.id}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Status</p>
+                  <BillingStatusBadge status={selectedBilling.status} />
+                </div>
+              </div>
+              
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Unidade</p>
+                <p>{selectedBilling.unit}</p>
+              </div>
+              
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Morador</p>
+                <p>{selectedBilling.resident}</p>
+              </div>
+              
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Descrição</p>
+                <p>{selectedBilling.description}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Valor</p>
+                  <p className="font-semibold">{formatCurrency(selectedBilling.amount)}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Vencimento</p>
+                  <p>{formatDate(selectedBilling.dueDate)}</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Enviado</p>
+                  <p>{selectedBilling.is_sent ? 'Sim' : 'Não'}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Impresso</p>
+                  <p>{selectedBilling.is_printed ? 'Sim' : 'Não'}</p>
+                </div>
+              </div>
+              
+              <div className="flex justify-end pt-4">
+                <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+                  Fechar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Edit Dialog - placeholder for future implementation */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar Cobrança</DialogTitle>
+            <DialogDescription>
+              Edite as informações desta cobrança.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedBilling && (
+            <div className="space-y-4">
+              <p>Funcionalidade de edição em desenvolvimento...</p>
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={() => {
+                  toast.info('Funcionalidade em desenvolvimento');
+                  setIsEditDialogOpen(false);
+                }}>
+                  Salvar
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

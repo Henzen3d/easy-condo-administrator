@@ -116,3 +116,70 @@ export async function fetchUnits(): Promise<Unit[]> {
     return [];
   }
 }
+
+// Update billing status (paid, cancelled, etc.)
+export async function updateBillingStatus(id: string, status: 'pending' | 'paid' | 'overdue' | 'cancelled'): Promise<boolean> {
+  try {
+    console.log(`Updating billing ${id} status to ${status}`);
+    const { error } = await supabase
+      .from('billings')
+      .update({ status })
+      .eq('id', id);
+    
+    if (error) {
+      console.error('Error updating billing status:', error);
+      return false;
+    }
+    
+    console.log(`Billing ${id} updated successfully`);
+    return true;
+  } catch (error) {
+    console.error('Exception while updating billing status:', error);
+    return false;
+  }
+}
+
+// Update billing flags (is_sent, is_printed)
+export async function updateBillingFlag(id: string, field: 'is_sent' | 'is_printed', value: boolean): Promise<boolean> {
+  try {
+    console.log(`Updating billing ${id} ${field} to ${value}`);
+    const { error } = await supabase
+      .from('billings')
+      .update({ [field]: value })
+      .eq('id', id);
+    
+    if (error) {
+      console.error(`Error updating billing ${field}:`, error);
+      return false;
+    }
+    
+    console.log(`Billing ${id} ${field} updated successfully`);
+    return true;
+  } catch (error) {
+    console.error(`Exception while updating billing ${field}:`, error);
+    return false;
+  }
+}
+
+// Get a single billing by ID
+export async function getBillingById(id: string): Promise<Billing | null> {
+  try {
+    console.log(`Fetching billing with id ${id}`);
+    const { data, error } = await supabase
+      .from('billings')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) {
+      console.error('Error fetching billing:', error);
+      return null;
+    }
+    
+    console.log(`Billing fetched:`, data);
+    return data as Billing;
+  } catch (error) {
+    console.error('Exception while fetching billing:', error);
+    return null;
+  }
+}
