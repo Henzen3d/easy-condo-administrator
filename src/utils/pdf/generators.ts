@@ -221,11 +221,43 @@ export const generateMockInvoiceData = (billingData: any): InvoiceData => {
 
 // Function to prepare invoice data from billing data and unit information
 export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData => {
+  // Filter charge items to include only items that belong to all units or specifically to this unit
+  const filteredChargeItems = billingData.chargeItems?.filter((item: any) => {
+    // Incluir itens gerais sem unidade específica
+    if (!item.unit) return true;
+    
+    // Verificar se item é específico desta unidade
+    return item.unit === unitInfo.id.toString();
+  }) || [];
+  
+  // Filter consumption items specifically for this unit
+  let gasConsumptionItems = [];
+  let waterConsumptionItems = [];
+  
+  if (billingData.includeGasConsumption && billingData.gasConsumptionItems) {
+    gasConsumptionItems = billingData.gasConsumptionItems.filter((item: any) => 
+      item.unit === unitInfo.id.toString()
+    );
+  }
+  
+  if (billingData.includeWaterConsumption && billingData.waterConsumptionItems) {
+    waterConsumptionItems = billingData.waterConsumptionItems.filter((item: any) => 
+      item.unit === unitInfo.id.toString()
+    );
+  }
+  
+  // Combine all items for this specific unit
+  const allUnitItems = [
+    ...filteredChargeItems,
+    ...gasConsumptionItems,
+    ...waterConsumptionItems
+  ];
+  
   // Calculate the total amount
-  const subtotal = billingData.chargeItems?.reduce(
+  const subtotal = allUnitItems.reduce(
     (sum: number, item: any) => sum + parseFloat(item.value || 0), 
     0
-  ) || 0;
+  );
   
   // Calculate discount if applicable
   let discountAmount = 0;
@@ -261,11 +293,11 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
     referenceYear: billingData.reference?.year || new Date().getFullYear(),
     dueDate: billingData.dueDate || new Date().toISOString(),
     
-    items: billingData.chargeItems?.map((item: any) => ({
+    items: allUnitItems.map((item: any) => ({
       description: item.description,
       category: item.category,
       value: parseFloat(item.value || 0)
-    })) || [],
+    })),
     
     subtotal,
     discount: discountObject,
