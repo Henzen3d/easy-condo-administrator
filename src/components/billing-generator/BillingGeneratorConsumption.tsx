@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -191,6 +190,32 @@ export default function BillingGeneratorConsumption({
 
       if (previousError) throw previousError;
 
+      // If no previous reading found, try to get the initial reading (oldest reading for this unit)
+      let previous = null;
+      if (previousData.length > 0) {
+        previous = {
+          ...previousData[0],
+          utility_type: previousData[0].utility_type as "gas" | "water"
+        };
+      } else {
+        // Buscar a leitura inicial (a mais antiga) caso não exista leitura anterior ao período
+        const { data: initialData, error: initialError } = await supabase
+          .from('meter_readings')
+          .select('*')
+          .eq('unit_id', unit_id)
+          .eq('utility_type', utility_type)
+          .order('reading_date', { ascending: true }) // Ordena pela mais antiga primeiro
+          .limit(1);
+          
+        if (!initialError && initialData.length > 0) {
+          previous = {
+            ...initialData[0],
+            utility_type: initialData[0].utility_type as "gas" | "water"
+          };
+          console.log(`Usando leitura inicial como anterior para ${utility_type} da unidade ${unit_id}:`, previous);
+        }
+      }
+
       // Get current reading (closest to end date)
       const { data: currentData, error: currentError } = await supabase
         .from('meter_readings')
@@ -203,15 +228,16 @@ export default function BillingGeneratorConsumption({
 
       if (currentError) throw currentError;
 
-      const previous = previousData.length > 0 ? {
-        ...previousData[0],
-        utility_type: previousData[0].utility_type as "gas" | "water"
-      } : null;
-
       const current = currentData.length > 0 ? {
         ...currentData[0],
         utility_type: currentData[0].utility_type as "gas" | "water"
       } : null;
+
+      // Se a leitura atual e anterior forem as mesmas, não considerar como leitura anterior
+      if (previous && current && previous.id === current.id) {
+        previous = null;
+        console.log(`Leitura anterior e atual são iguais para ${utility_type} da unidade ${unit_id}, considerando sem leitura anterior`);
+      }
 
       return { previous, current };
     } catch (error) {
@@ -239,9 +265,17 @@ export default function BillingGeneratorConsumption({
         let consumption = null;
         let total = null;
         
+        // Calcular consumo somente se tiver ambas as leituras
         if (previous && current && gasRate) {
-          consumption = Math.max(0, current.reading_value - previous.reading_value);
-          total = consumption * gasRate.rate_per_cubic_meter;
+          // Verifica se a leitura atual é maior que a anterior
+          if (current.reading_value >= previous.reading_value) {
+            consumption = current.reading_value - previous.reading_value;
+            total = consumption * gasRate.rate_per_cubic_meter;
+          } else {
+            console.warn(`Leitura atual de gás (${current.reading_value}) é menor que a anterior (${previous.reading_value}) para unidade ${unit.id}`);
+            consumption = 0;
+            total = 0;
+          }
         }
 
         return {
@@ -262,9 +296,17 @@ export default function BillingGeneratorConsumption({
         let consumption = null;
         let total = null;
         
+        // Calcular consumo somente se tiver ambas as leituras
         if (previous && current && waterRate) {
-          consumption = Math.max(0, current.reading_value - previous.reading_value);
-          total = consumption * waterRate.rate_per_cubic_meter;
+          // Verifica se a leitura atual é maior que a anterior
+          if (current.reading_value >= previous.reading_value) {
+            consumption = current.reading_value - previous.reading_value;
+            total = consumption * waterRate.rate_per_cubic_meter;
+          } else {
+            console.warn(`Leitura atual de água (${current.reading_value}) é menor que a anterior (${previous.reading_value}) para unidade ${unit.id}`);
+            consumption = 0;
+            total = 0;
+          }
         }
 
         return {
@@ -427,10 +469,13 @@ export default function BillingGeneratorConsumption({
                                 <div>{item.previous_reading.reading_value} m³</div>
                                 <div className="text-xs text-muted-foreground">
                                   {formatDate(item.previous_reading.reading_date)}
+                                  {item.current_reading && item.previous_reading.reading_date === item.current_reading.reading_date ? (
+                                    <span className="ml-1 text-blue-600 font-medium">(Leitura Inicial)</span>
+                                  ) : ""}
                                 </div>
                               </div>
                             ) : (
-                              <span className="text-amber-600">Sem leitura</span>
+                              <span className="text-amber-600">Sem leitura anterior</span>
                             )}
                           </TableCell>
                           <TableCell>
@@ -515,10 +560,13 @@ export default function BillingGeneratorConsumption({
                                 <div>{item.previous_reading.reading_value} m³</div>
                                 <div className="text-xs text-muted-foreground">
                                   {formatDate(item.previous_reading.reading_date)}
+                                  {item.current_reading && item.previous_reading.reading_date === item.current_reading.reading_date ? (
+                                    <span className="ml-1 text-blue-600 font-medium">(Leitura Inicial)</span>
+                                  ) : ""}
                                 </div>
                               </div>
                             ) : (
-                              <span className="text-amber-600">Sem leitura</span>
+                              <span className="text-amber-600">Sem leitura anterior</span>
                             )}
                           </TableCell>
                           <TableCell>

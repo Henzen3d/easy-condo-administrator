@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { 
@@ -52,6 +51,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import NewBillingForm from "@/components/billing/NewBillingForm";
+import EditBillingForm from "@/components/billing/EditBillingForm";
 import BillingFilters from "@/components/billing/BillingFilters";
 import { supabase } from "@/integrations/supabase/client";
 // Use type-only import to avoid naming conflicts
@@ -106,6 +106,7 @@ const Billing = () => {
   const [isNewBillingOpen, setIsNewBillingOpen] = useState(false);
   const [tabValue, setTabValue] = useState("all");
   const [billings, setBillings] = useState<BillingDisplay[]>([]);
+  const [filteredBillings, setFilteredBillings] = useState<BillingDisplay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedBilling, setSelectedBilling] = useState<BillingDisplay | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
@@ -119,6 +120,21 @@ const Billing = () => {
     actionText: string;
   } | null>(null);
   const [isActionInProgress, setIsActionInProgress] = useState(false);
+  const [activeFilters, setActiveFilters] = useState<{
+    status: string;
+    unit: string;
+    unit_id: string;
+    resident: string;
+    startDate: Date | null;
+    endDate: Date | null;
+  }>({
+    status: "all",
+    unit: "",
+    unit_id: "all",
+    resident: "",
+    startDate: null,
+    endDate: null
+  });
 
   // Memoize fetchBillings to prevent re-renders causing multiple fetches
   const fetchBillings = useCallback(async () => {
@@ -152,17 +168,20 @@ const Billing = () => {
         });
         
         setBillings(formattedBillings);
+        applyFilters(formattedBillings, activeFilters, tabValue);
       } else {
         setBillings([]);
+        setFilteredBillings([]);
       }
     } catch (error) {
       console.error('Error fetching billings:', error);
       toast.error('Erro ao carregar cobranças');
       setBillings([]);
+      setFilteredBillings([]);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeFilters, tabValue]);
   
   // Helper function to validate billing status
   const validateStatus = (status: string): BillingStatus => {
@@ -176,13 +195,87 @@ const Billing = () => {
     fetchBillings();
   }, [fetchBillings]);
 
-  const filteredBillings = billings.filter(billing => {
-    if (tabValue === "all") return true;
-    if (tabValue === "pending") return billing.status === "pending";
-    if (tabValue === "paid") return billing.status === "paid";
-    if (tabValue === "overdue") return billing.status === "overdue";
-    return true;
-  });
+  // Aplicar filtros na lista de cobranças
+  const applyFilters = (
+    allBillings: BillingDisplay[], 
+    filters: {
+      status: string;
+      unit: string; 
+      unit_id: string;
+      resident: string;
+      startDate: Date | null;
+      endDate: Date | null;
+    },
+    currentTab: string
+  ) => {
+    let result = [...allBillings];
+    
+    // Filtrar por tab
+    if (currentTab !== "all") {
+      result = result.filter(billing => billing.status === currentTab);
+    }
+    
+    // Filtro por status (se não estiver usando tabs ou se o status escolhido for diferente do tab)
+    if (filters.status !== "all" && (currentTab === "all" || filters.status !== currentTab)) {
+      result = result.filter(billing => billing.status === filters.status);
+    }
+    
+    // Filtro por unit_id
+    if (filters.unit_id && filters.unit_id !== "all") {
+      result = result.filter(billing => 
+        billing.unit_id?.toString() === filters.unit_id
+      );
+    }
+    
+    // Filtro por residente
+    if (filters.resident) {
+      const residentLower = filters.resident.toLowerCase();
+      result = result.filter(billing => 
+        billing.resident.toLowerCase().includes(residentLower)
+      );
+    }
+    
+    // Filtro por data inicial
+    if (filters.startDate) {
+      const startDate = new Date(filters.startDate);
+      startDate.setHours(0, 0, 0, 0);
+      result = result.filter(billing => {
+        const dueDate = new Date(billing.dueDate);
+        return dueDate >= startDate;
+      });
+    }
+    
+    // Filtro por data final
+    if (filters.endDate) {
+      const endDate = new Date(filters.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      result = result.filter(billing => {
+        const dueDate = new Date(billing.dueDate);
+        return dueDate <= endDate;
+      });
+    }
+    
+    setFilteredBillings(result);
+  };
+
+  // Handler para quando as tabs mudam
+  const handleTabChange = (value: string) => {
+    setTabValue(value);
+    applyFilters(billings, activeFilters, value);
+  };
+
+  // Handler para aplicar filtros
+  const handleApplyFilters = (filters: {
+    status: string;
+    unit: string;
+    unit_id: string;
+    resident: string;
+    startDate: Date | null;
+    endDate: Date | null;
+  }) => {
+    setActiveFilters(filters);
+    applyFilters(billings, filters, tabValue);
+  };
 
   // Improved action handlers with confirmation dialogs
   const showConfirmAction = (
@@ -385,13 +478,13 @@ const Billing = () => {
 
       <div className="grid md:grid-cols-4 gap-6">
         <div className="md:col-span-1">
-          <BillingFilters />
+          <BillingFilters onApplyFilters={handleApplyFilters} />
         </div>
         
         <div className="md:col-span-3">
           <Card>
             <CardHeader className="pb-0">
-              <Tabs value={tabValue} onValueChange={setTabValue}>
+              <Tabs value={tabValue} onValueChange={handleTabChange}>
                 <TabsList>
                   <TabsTrigger value="all">Todas</TabsTrigger>
                   <TabsTrigger value="pending">Pendentes</TabsTrigger>
@@ -641,7 +734,7 @@ const Billing = () => {
         </DialogContent>
       </Dialog>
       
-      {/* Edit Dialog - placeholder for future implementation */}
+      {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -651,20 +744,11 @@ const Billing = () => {
             </DialogDescription>
           </DialogHeader>
           {selectedBilling && (
-            <div className="space-y-4">
-              <p>Funcionalidade de edição em desenvolvimento...</p>
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={() => {
-                  toast.info('Funcionalidade em desenvolvimento');
-                  setIsEditDialogOpen(false);
-                }}>
-                  Salvar
-                </Button>
-              </div>
-            </div>
+            <EditBillingForm 
+              billing={selectedBilling}
+              onClose={() => setIsEditDialogOpen(false)}
+              onSave={fetchBillings}
+            />
           )}
         </DialogContent>
       </Dialog>

@@ -194,11 +194,8 @@ const BillingGenerator = () => {
 
       {activeTab === "generator" && (
         <>
-          <div className="flex justify-end">
-            <Button className="gap-2">
-              <Plus size={16} />
-              Gerar Novo Faturamento
-            </Button>
+          <div className="grid gap-4">
+            <h2 className="text-2xl font-bold">Gerar Faturamento</h2>
           </div>
 
           <Card>

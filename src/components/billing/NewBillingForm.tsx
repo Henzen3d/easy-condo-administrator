@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +15,14 @@ import {
 } from "@/utils/consumptionUtils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { Gas, Droplets, Banknote, Check, CreditCard, Info } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Resident {
   id: number;
@@ -223,22 +230,52 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     
     const readings = [];
     
-    if (includeGas && typeof gasCurrent === 'number' && gasCurrent > 0) {
-      readings.push({
-        unit_id: unitId,
-        utility_type: 'gas',
-        reading_value: gasCurrent,
-        reading_date: new Date().toISOString().split('T')[0]
-      });
+    if (includeGas) {
+      // Se for a leitura inicial, salva como uma nova leitura
+      if (isInitialGasReading && typeof gasPrevious === 'number' && gasPrevious > 0) {
+        readings.push({
+          unit_id: unitId,
+          utility_type: 'gas',
+          reading_value: gasPrevious,
+          reading_date: new Date().toISOString().split('T')[0]
+        });
+        console.log("Saving initial gas reading:", gasPrevious);
+      }
+      
+      // Sempre salva a leitura atual (se for válida)
+      if (typeof gasCurrent === 'number' && gasCurrent > 0) {
+        readings.push({
+          unit_id: unitId,
+          utility_type: 'gas',
+          reading_value: gasCurrent,
+          reading_date: new Date().toISOString().split('T')[0]
+        });
+        console.log("Saving current gas reading:", gasCurrent);
+      }
     }
     
-    if (includeWater && typeof waterCurrent === 'number' && waterCurrent > 0) {
-      readings.push({
-        unit_id: unitId,
-        utility_type: 'water',
-        reading_value: waterCurrent,
-        reading_date: new Date().toISOString().split('T')[0]
-      });
+    if (includeWater) {
+      // Se for a leitura inicial, salva como uma nova leitura
+      if (isInitialWaterReading && typeof waterPrevious === 'number' && waterPrevious > 0) {
+        readings.push({
+          unit_id: unitId,
+          utility_type: 'water',
+          reading_value: waterPrevious,
+          reading_date: new Date().toISOString().split('T')[0]
+        });
+        console.log("Saving initial water reading:", waterPrevious);
+      }
+      
+      // Sempre salva a leitura atual (se for válida)
+      if (typeof waterCurrent === 'number' && waterCurrent > 0) {
+        readings.push({
+          unit_id: unitId,
+          utility_type: 'water',
+          reading_value: waterCurrent,
+          reading_date: new Date().toISOString().split('T')[0]
+        });
+        console.log("Saving current water reading:", waterCurrent);
+      }
     }
     
     if (readings.length > 0) {
@@ -264,6 +301,55 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         toast.error('Por favor, preencha todos os campos obrigatórios');
         setIsLoading(false);
         return;
+      }
+
+      // Validações adicionais para leituras de consumo
+      if (chargeType === 'consumption') {
+        if (includeGas) {
+          // Validar leitura inicial de gás
+          if (isInitialGasReading && (!gasPrevious || gasPrevious <= 0)) {
+            toast.error('Por favor, informe a leitura inicial de gás');
+            setIsLoading(false);
+            return;
+          }
+          
+          // Validar leitura atual de gás
+          if (!gasCurrent || gasCurrent <= 0) {
+            toast.error('Por favor, informe a leitura atual de gás');
+            setIsLoading(false);
+            return;
+          }
+          
+          // Verificar se a leitura atual é maior que a anterior
+          if (!isInitialGasReading && gasCurrent <= gasPrevious) {
+            toast.error('A leitura atual de gás deve ser maior que a leitura anterior');
+            setIsLoading(false);
+            return;
+          }
+        }
+        
+        if (includeWater) {
+          // Validar leitura inicial de água
+          if (isInitialWaterReading && (!waterPrevious || waterPrevious <= 0)) {
+            toast.error('Por favor, informe a leitura inicial de água');
+            setIsLoading(false);
+            return;
+          }
+          
+          // Validar leitura atual de água
+          if (!waterCurrent || waterCurrent <= 0) {
+            toast.error('Por favor, informe a leitura atual de água');
+            setIsLoading(false);
+            return;
+          }
+          
+          // Verificar se a leitura atual é maior que a anterior
+          if (!isInitialWaterReading && waterCurrent <= waterPrevious) {
+            toast.error('A leitura atual de água deve ser maior que a leitura anterior');
+            setIsLoading(false);
+            return;
+          }
+        }
       }
       
       const readingsSaved = await saveMeterReadings();
@@ -386,151 +472,221 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
       )}
       
       {chargeType === "consumption" && (
-        <Accordion type="single" collapsible className="w-full">
-          <AccordionItem value="gas">
-            <AccordionTrigger className="flex items-center">
-              <div className="flex items-center gap-2">
-                <Checkbox 
-                  id="include-gas" 
-                  checked={includeGas} 
-                  onCheckedChange={(checked) => setIncludeGas(!!checked)}
-                />
-                <Label htmlFor="include-gas" className="font-normal cursor-pointer">
-                  Consumo de Gás
-                </Label>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              {includeGas && (
-                <div className="space-y-3 pt-2">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="gas-previous">
-                        {isInitialGasReading ? 'Leitura Inicial' : 'Leitura Anterior'}
-                      </Label>
-                      <Input 
-                        id="gas-previous" 
-                        type="number" 
-                        min="0" 
-                        step="0.01" 
-                        value={gasPrevious === "" ? "" : gasPrevious}
-                        onChange={(e) => setGasPrevious(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="gas-current">Leitura Atual</Label>
-                      <Input 
-                        id="gas-current" 
-                        type="number" 
-                        min="0" 
-                        step="0.01" 
-                        value={gasCurrent === "" ? "" : gasCurrent}
-                        onChange={(e) => setGasCurrent(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="gas-rate">Taxa por m³ (R$)</Label>
-                      <Input 
-                        id="gas-rate" 
-                        type="number" 
-                        min="0" 
-                        step="0.01" 
-                        value={gasRate === "" ? "" : gasRate}
-                        onChange={(e) => setGasRate(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="gas-total">Total (R$)</Label>
-                      <Input 
-                        id="gas-total" 
-                        type="number" 
-                        min="0" 
-                        step="0.01" 
-                        value={gasTotal.toFixed(2)}
-                        readOnly 
-                        className="bg-gray-50"
-                      />
-                    </div>
-                  </div>
+        <>
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="gas">
+              <AccordionTrigger className="flex items-center">
+                <div className="flex items-center gap-2">
+                  <Checkbox 
+                    id="include-gas" 
+                    checked={includeGas} 
+                    onCheckedChange={(checked) => setIncludeGas(!!checked)}
+                  />
+                  <Label htmlFor="include-gas" className="font-normal cursor-pointer">
+                    Consumo de Gás
+                  </Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-blue-500 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs text-left" side="right">
+                        <div className="space-y-2 p-1 text-sm">
+                          <p className="font-semibold">Como funciona o cálculo de consumo:</p>
+                          <ul className="list-disc pl-5 space-y-1">
+                            <li>Na primeira cobrança, você informa a <strong>Leitura Inicial</strong> que servirá como referência.</li>
+                            <li>Nas cobranças seguintes, o sistema carrega a última leitura como <strong>Leitura Anterior</strong>.</li>
+                            <li>Você insere a <strong>Leitura Atual</strong> e o sistema calcula o consumo (Atual - Anterior).</li>
+                            <li>A leitura atual é salva e servirá como Leitura Anterior na próxima cobrança.</li>
+                          </ul>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
-          
-          <AccordionItem value="water">
-            <AccordionTrigger className="flex items-center">
-              <div className="flex items-center gap-2">
-                <Checkbox 
-                  id="include-water" 
-                  checked={includeWater} 
-                  onCheckedChange={(checked) => setIncludeWater(!!checked)}
-                />
-                <Label htmlFor="include-water" className="font-normal cursor-pointer">
-                  Consumo de Água
-                </Label>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              {includeWater && (
-                <div className="space-y-3 pt-2">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="water-previous">
-                        {isInitialWaterReading ? 'Leitura Inicial' : 'Leitura Anterior'}
-                      </Label>
-                      <Input 
-                        id="water-previous" 
-                        type="number" 
-                        min="0" 
-                        step="0.01" 
-                        value={waterPrevious === "" ? "" : waterPrevious}
-                        onChange={(e) => setWaterPrevious(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                      />
+              </AccordionTrigger>
+              <AccordionContent>
+                {includeGas && (
+                  <div className="space-y-3 pt-2">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="gas-previous">
+                          {isInitialGasReading ? "Leitura Inicial de Gás (m³)" : "Leitura Anterior de Gás (m³)"}
+                        </Label>
+                        <div className="flex-1">
+                          <Input
+                            id="gas-previous"
+                            type="number"
+                            placeholder="Leitura anterior"
+                            value={gasPrevious}
+                            onChange={(e) => setGasPrevious(parseFloat(e.target.value) || "")}
+                            readOnly={!isInitialGasReading}
+                            className={!isInitialGasReading ? "bg-muted" : ""}
+                          />
+                          {isInitialGasReading ? (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Primeira leitura para esta unidade
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Última leitura registrada
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="gas-current">Leitura Atual de Gás (m³)</Label>
+                        <div className="flex-1">
+                          <Input
+                            id="gas-current"
+                            type="number"
+                            placeholder="Leitura atual"
+                            value={gasCurrent}
+                            onChange={(e) => setGasCurrent(parseFloat(e.target.value) || "")}
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Leitura atual para calcular consumo
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="water-current">Leitura Atual</Label>
-                      <Input 
-                        id="water-current" 
-                        type="number" 
-                        min="0" 
-                        step="0.01" 
-                        value={waterCurrent === "" ? "" : waterCurrent}
-                        onChange={(e) => setWaterCurrent(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                      />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="gas-rate">Taxa por m³ (R$)</Label>
+                        <Input 
+                          id="gas-rate" 
+                          type="number" 
+                          min="0" 
+                          step="0.01" 
+                          value={gasRate === "" ? "" : gasRate}
+                          onChange={(e) => setGasRate(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="gas-total">Total (R$)</Label>
+                        <Input 
+                          id="gas-total" 
+                          type="number" 
+                          min="0" 
+                          step="0.01" 
+                          value={gasTotal.toFixed(2)}
+                          readOnly 
+                          className="bg-gray-50"
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="water-rate">Taxa por m³ (R$)</Label>
-                      <Input 
-                        id="water-rate" 
-                        type="number" 
-                        min="0" 
-                        step="0.01" 
-                        value={waterRate === "" ? "" : waterRate}
-                        onChange={(e) => setWaterRate(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="water-total">Total (R$)</Label>
-                      <Input 
-                        id="water-total" 
-                        type="number" 
-                        min="0" 
-                        step="0.01" 
-                        value={waterTotal.toFixed(2)}
-                        readOnly 
-                        className="bg-gray-50"
-                      />
-                    </div>
-                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+            
+            <AccordionItem value="water">
+              <AccordionTrigger className="flex items-center">
+                <div className="flex items-center gap-2">
+                  <Checkbox 
+                    id="include-water" 
+                    checked={includeWater} 
+                    onCheckedChange={(checked) => setIncludeWater(!!checked)}
+                  />
+                  <Label htmlFor="include-water" className="font-normal cursor-pointer">
+                    Consumo de Água
+                  </Label>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-blue-500 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs text-left" side="right">
+                        <div className="space-y-2 p-1 text-sm">
+                          <p className="font-semibold">Como funciona o cálculo de consumo:</p>
+                          <ul className="list-disc pl-5 space-y-1">
+                            <li>Na primeira cobrança, você informa a <strong>Leitura Inicial</strong> que servirá como referência.</li>
+                            <li>Nas cobranças seguintes, o sistema carrega a última leitura como <strong>Leitura Anterior</strong>.</li>
+                            <li>Você insere a <strong>Leitura Atual</strong> e o sistema calcula o consumo (Atual - Anterior).</li>
+                            <li>A leitura atual é salva e servirá como Leitura Anterior na próxima cobrança.</li>
+                          </ul>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
-              )}
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+              </AccordionTrigger>
+              <AccordionContent>
+                {includeWater && (
+                  <div className="space-y-3 pt-2">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="water-previous">
+                          {isInitialWaterReading ? "Leitura Inicial de Água (m³)" : "Leitura Anterior de Água (m³)"}
+                        </Label>
+                        <div className="flex-1">
+                          <Input
+                            id="water-previous"
+                            type="number"
+                            placeholder="Leitura anterior"
+                            value={waterPrevious}
+                            onChange={(e) => setWaterPrevious(parseFloat(e.target.value) || "")}
+                            readOnly={!isInitialWaterReading}
+                            className={!isInitialWaterReading ? "bg-muted" : ""}
+                          />
+                          {isInitialWaterReading ? (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Primeira leitura para esta unidade
+                            </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Última leitura registrada
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="water-current">Leitura Atual de Água (m³)</Label>
+                        <div className="flex-1">
+                          <Input
+                            id="water-current"
+                            type="number"
+                            placeholder="Leitura atual"
+                            value={waterCurrent}
+                            onChange={(e) => setWaterCurrent(parseFloat(e.target.value) || "")}
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Leitura atual para calcular consumo
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="water-rate">Taxa por m³ (R$)</Label>
+                        <Input 
+                          id="water-rate" 
+                          type="number" 
+                          min="0" 
+                          step="0.01" 
+                          value={waterRate === "" ? "" : waterRate}
+                          onChange={(e) => setWaterRate(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="water-total">Total (R$)</Label>
+                        <Input 
+                          id="water-total" 
+                          type="number" 
+                          min="0" 
+                          step="0.01" 
+                          value={waterTotal.toFixed(2)}
+                          readOnly 
+                          className="bg-gray-50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </>
       )}
       
       {chargeType === "extra" && (
