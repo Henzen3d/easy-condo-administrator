@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -75,11 +74,34 @@ const BillingGeneratorPDF = ({ billingData }: BillingGeneratorPDFProps) => {
   const relevantUnits = getRelevantUnits();
 
   // Download invoice for all units
-  const handleDownloadAllInvoices = () => {
-    toast({
-      title: "Gerando faturas",
-      description: "Iniciando o download de todas as faturas. Isso pode levar alguns instantes.",
-    });
+  const handleDownloadAllInvoices = async () => {
+    try {
+      toast({
+        title: "Gerando faturas",
+        description: "Iniciando o download de todas as faturas. Isso pode levar alguns instantes.",
+      });
+
+      // Generate invoices sequentially to avoid overwhelming the browser
+      for (const unit of relevantUnits) {
+        const invoiceData = prepareInvoiceData(billingData, unit);
+        await generateAndDownloadInvoice(invoiceData);
+        
+        // Add a small delay between downloads
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      toast({
+        title: "Faturas geradas",
+        description: "Todas as faturas foram geradas com sucesso.",
+      });
+    } catch (error) {
+      console.error('Error generating all invoices:', error);
+      toast({
+        title: "Erro ao gerar faturas",
+        description: "Ocorreu um erro ao gerar as faturas. Tente novamente.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (

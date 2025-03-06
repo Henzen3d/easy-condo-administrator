@@ -1,4 +1,3 @@
-
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
@@ -90,11 +89,14 @@ const formatCurrency = (value: number): string => {
 // Save invoice to Supabase
 export const saveInvoiceToStorage = async (pdfBlob: Blob, fileName: string): Promise<string | null> => {
   try {
+    // Make sure we're using the faturas/ prefix
+    const fullPath = fileName.startsWith('faturas/') ? fileName : `faturas/${fileName}`;
+    
     // Upload PDF to Supabase Storage
     const { data, error } = await supabase
       .storage
       .from('invoices')
-      .upload(fileName, pdfBlob, {
+      .upload(fullPath, pdfBlob, {
         contentType: 'application/pdf',
         upsert: true
       });
@@ -176,7 +178,7 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
   pdf.setFont('helvetica', 'normal');
   pdf.text(invoiceData.contactPhone, 80, 130);
   
-  // Generate invoice items table
+  // Generate invoice items table with adjusted column widths
   autoTable(pdf, {
     startY: 140,
     head: [['SERVIÇO', 'DESCRIÇÃO', 'VALOR']],
@@ -192,13 +194,14 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
       halign: 'left'
     },
     columnStyles: {
-      0: { cellWidth: 50 },
-      1: { cellWidth: 90 },
-      2: { cellWidth: 30, halign: 'right' }
+      0: { cellWidth: 40 },
+      1: { cellWidth: 110 },
+      2: { cellWidth: 40, halign: 'right' }
     },
     styles: {
       fontSize: 10,
-      cellPadding: 5
+      cellPadding: 5,
+      overflow: 'linebreak'
     },
     alternateRowStyles: {
       fillColor: [245, 245, 245]

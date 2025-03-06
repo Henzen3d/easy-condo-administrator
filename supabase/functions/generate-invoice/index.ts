@@ -59,13 +59,33 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Create the invoices bucket if it doesn't exist
+    const { data: buckets, error: bucketsError } = await supabase
+      .storage
+      .listBuckets();
+
+    if (bucketsError) {
+      throw new Error(`Error checking buckets: ${bucketsError.message}`);
+    }
+
+    const invoicesBucket = buckets?.find(b => b.name === 'invoices');
+    if (!invoicesBucket) {
+      const { error: createError } = await supabase
+        .storage
+        .createBucket('invoices', { public: true });
+
+      if (createError) {
+        throw new Error(`Error creating bucket: ${createError.message}`);
+      }
+    }
+
     // In a real implementation, you would:
     // 1. Generate the PDF on the server using a library like PDFKit
     // 2. Save it to Supabase Storage
     // 3. Return the public URL to the client
 
     // For this demo, we'll simulate a successful operation
-    const simulatedUrl = `${supabaseUrl}/storage/v1/object/public/invoices/fatura_${invoiceData.unitBlock}_${invoiceData.unitNumber}_${invoiceData.referenceMonth}_${invoiceData.referenceYear}.pdf`;
+    const simulatedUrl = `${supabaseUrl}/storage/v1/object/public/invoices/faturas/fatura_${invoiceData.unitBlock}_${invoiceData.unitNumber}_${invoiceData.referenceMonth}_${invoiceData.referenceYear}.pdf`;
 
     // Return the result
     return new Response(
