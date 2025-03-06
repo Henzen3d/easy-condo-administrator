@@ -7,7 +7,7 @@ export const STEPS = [
   { id: 2, name: "Consumo" },
   { id: 3, name: "Itens de Cobrança" },
   { id: 4, name: "Configurações dos Boletos" },
-  { id: 5, name: "Confirmar" },
+  { id: 5, name: "Resumo do Faturamento" },
   { id: 6, name: "Gerar Faturas" },
 ];
 

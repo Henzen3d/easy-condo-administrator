@@ -36,15 +36,29 @@ export const BillingGeneratorContent = ({
   // Update charge items when moving to step 3
   useEffect(() => {
     if (activeStep === 3) {
-      // This logic is moved from the original file
+      // Create a map of existing items by description to avoid duplicates
+      const existingItemsMap = new Map(
+        billingData.chargeItems.map(item => [item.description, item])
+      );
+
       let allItems = [...billingData.chargeItems];
       
       if (billingData.includeGasConsumption && billingData.gasConsumptionItems.length > 0) {
-        allItems = [...allItems, ...billingData.gasConsumptionItems];
+        billingData.gasConsumptionItems.forEach(item => {
+          if (!existingItemsMap.has(item.description)) {
+            allItems.push(item);
+            existingItemsMap.set(item.description, item);
+          }
+        });
       }
       
       if (billingData.includeWaterConsumption && billingData.waterConsumptionItems.length > 0) {
-        allItems = [...allItems, ...billingData.waterConsumptionItems];
+        billingData.waterConsumptionItems.forEach(item => {
+          if (!existingItemsMap.has(item.description)) {
+            allItems.push(item);
+            existingItemsMap.set(item.description, item);
+          }
+        });
       }
       
       updateBillingData({ chargeItems: allItems });

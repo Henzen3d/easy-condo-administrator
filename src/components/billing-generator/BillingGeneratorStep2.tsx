@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +30,7 @@ import {
   Card, 
   CardContent 
 } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
 
 interface BillingGeneratorStep2Props {
   billingData: any;
@@ -78,6 +78,7 @@ const BillingGeneratorStep2 = ({
   billingData, 
   updateBillingData 
 }: BillingGeneratorStep2Props) => {
+  const { toast } = useToast();
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
   const [existingCharges] = useState(mockChargeItems);
   const [selectedUnit, setSelectedUnit] = useState("all");
@@ -95,17 +96,86 @@ const BillingGeneratorStep2 = ({
     category: "taxa"
   });
 
+  // Handle generating single invoice
+  const handleGenerateSingleInvoice = (unitId: string) => {
+    const unit = mockUnits.find(u => String(u.id) === unitId);
+    if (!unit) {
+      toast({
+        title: "Erro",
+        description: "Unidade não encontrada",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const unitCharges = chargeItems.filter(item => 
+      item.unit === "all" || item.unit === unitId
+    );
+
+    if (unitCharges.length === 0) {
+      toast({
+        title: "Aviso",
+        description: "Nenhum item de cobrança encontrado para esta unidade",
+        variant: "default"
+      });
+      return;
+    }
+
+    // Generate invoice for the specific unit
+    const invoice = {
+      unit: `${unit.block}-${unit.number}`,
+      charges: unitCharges,
+      total: unitCharges.reduce((sum, item) => sum + item.value, 0)
+    };
+
+    // TODO: Implement PDF generation and download
+    toast({
+      title: "Fatura gerada",
+      description: `Fatura para ${unit.block}-${unit.number} gerada com sucesso`,
+    });
+
+    console.log("Invoice generated:", invoice);
+  };
+
   // Handle adding a new charge item
   const handleAddItem = () => {
+    // Check if item already exists
+    const itemExists = chargeItems.some(item => 
+      item.description === newItem.description &&
+      item.unit === newItem.unit &&
+      item.category === newItem.category
+    );
+
+    if (itemExists) {
+      alert('Este item já foi adicionado');
+      return;
+    }
+
     const newItemWithId = {
       ...newItem,
       id: Date.now(), // Simple ID generation
-      value: parseFloat(newItem.value)
+      value: parseFloat(newItem.value) // Mantém o valor original sem divisão
     };
-    
-    const updatedItems = [...chargeItems, newItemWithId];
-    setChargeItems(updatedItems);
-    updateBillingData({ chargeItems: updatedItems });
+
+    // Special handling for consumption items
+    if (newItem.category === 'consumo') {
+      // Create individual consumption items for each unit
+      const consumptionItems = mockUnits.map(unit => ({
+        ...newItemWithId,
+        id: Date.now() + unit.id, // Unique ID for each unit's consumption
+        description: `${newItem.description} - ${unit.block}-${unit.number}`,
+        unit: String(unit.id), // Specific unit ID
+        value: parseFloat(newItem.value) // Original value for each unit
+      }));
+      
+      const updatedItems = [...chargeItems, ...consumptionItems];
+      setChargeItems(updatedItems);
+      updateBillingData({ chargeItems: updatedItems });
+    } else {
+      const updatedItems = [...chargeItems, newItemWithId];
+      setChargeItems(updatedItems);
+      updateBillingData({ chargeItems: updatedItems });
+    }
     
     // Reset form
     setNewItem({
@@ -120,9 +190,19 @@ const BillingGeneratorStep2 = ({
 
   // Handle removing a charge item
   const handleRemoveItem = (itemId: number) => {
-    const updatedItems = chargeItems.filter(item => item.id !== itemId);
-    setChargeItems(updatedItems);
-    updateBillingData({ chargeItems: updatedItems });
+    // If removing a consumption item, remove all related unit items
+    const itemToRemove = chargeItems.find(item => item.id === itemId);
+    if (itemToRemove?.category === 'consumo') {
+      const updatedItems = chargeItems.filter(item => 
+        item.description !== itemToRemove.description
+      );
+      setChargeItems(updatedItems);
+      updateBillingData({ chargeItems: updatedItems });
+    } else {
+      const updatedItems = chargeItems.filter(item => item.id !== itemId);
+      setChargeItems(updatedItems);
+      updateBillingData({ chargeItems: updatedItems });
+    }
   };
 
   // Handle unit selection change
