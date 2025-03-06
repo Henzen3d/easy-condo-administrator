@@ -15,7 +15,7 @@ import {
 } from "@/utils/consumptionUtils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Gas, Droplets, Banknote, Check, CreditCard, Info } from "lucide-react";
+import { Droplets, Banknote, Check, CreditCard, Info, Flame } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import {
   Tooltip,
@@ -72,18 +72,15 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         setIsLoadingUnits(true);
         console.log("Fetching units and residents...");
         
-        // Fetch units data
         const unitsData = await fetchUnits();
         console.log("Units data fetched:", unitsData);
         
         if (unitsData.length === 0) {
-          // Log a more specific message if no units were found
           console.log("No units found in the database. This could indicate an empty table or permissions issue.");
         }
         
         setUnits(unitsData);
         
-        // Fetch residents data
         const { data: residentsData, error: residentsError } = await supabase
           .from('residents')
           .select('*');
@@ -208,11 +205,9 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
       console.log("Selected unit object:", selectedUnitObj);
       
       if (selectedUnitObj) {
-        // Auto-fill the resident field with the unit owner
         console.log("Setting resident to owner:", selectedUnitObj.owner);
         setResident(selectedUnitObj.owner);
         
-        // Check if there is a resident assigned to this unit
         const unitResident = residents.find(r => r.unit_id === selectedUnitObj.id);
         if (unitResident) {
           console.log("Found resident for unit:", unitResident);
@@ -231,7 +226,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     const readings = [];
     
     if (includeGas) {
-      // Se for a leitura inicial, salva como uma nova leitura
       if (isInitialGasReading && typeof gasPrevious === 'number' && gasPrevious > 0) {
         readings.push({
           unit_id: unitId,
@@ -242,7 +236,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         console.log("Saving initial gas reading:", gasPrevious);
       }
       
-      // Sempre salva a leitura atual (se for válida)
       if (typeof gasCurrent === 'number' && gasCurrent > 0) {
         readings.push({
           unit_id: unitId,
@@ -255,7 +248,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     }
     
     if (includeWater) {
-      // Se for a leitura inicial, salva como uma nova leitura
       if (isInitialWaterReading && typeof waterPrevious === 'number' && waterPrevious > 0) {
         readings.push({
           unit_id: unitId,
@@ -266,7 +258,6 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         console.log("Saving initial water reading:", waterPrevious);
       }
       
-      // Sempre salva a leitura atual (se for válida)
       if (typeof waterCurrent === 'number' && waterCurrent > 0) {
         readings.push({
           unit_id: unitId,
@@ -303,25 +294,21 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         return;
       }
 
-      // Validações adicionais para leituras de consumo
       if (chargeType === 'consumption') {
         if (includeGas) {
-          // Validar leitura inicial de gás
-          if (isInitialGasReading && (!gasPrevious || gasPrevious <= 0)) {
+          if (isInitialGasReading && (!gasPrevious || typeof gasPrevious === 'string' || gasPrevious <= 0)) {
             toast.error('Por favor, informe a leitura inicial de gás');
             setIsLoading(false);
             return;
           }
           
-          // Validar leitura atual de gás
-          if (!gasCurrent || gasCurrent <= 0) {
+          if (!gasCurrent || typeof gasCurrent === 'string' || gasCurrent <= 0) {
             toast.error('Por favor, informe a leitura atual de gás');
             setIsLoading(false);
             return;
           }
           
-          // Verificar se a leitura atual é maior que a anterior
-          if (!isInitialGasReading && gasCurrent <= gasPrevious) {
+          if (!isInitialGasReading && typeof gasPrevious === 'number' && typeof gasCurrent === 'number' && gasCurrent <= gasPrevious) {
             toast.error('A leitura atual de gás deve ser maior que a leitura anterior');
             setIsLoading(false);
             return;
@@ -329,22 +316,19 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
         }
         
         if (includeWater) {
-          // Validar leitura inicial de água
-          if (isInitialWaterReading && (!waterPrevious || waterPrevious <= 0)) {
+          if (isInitialWaterReading && (!waterPrevious || typeof waterPrevious === 'string' || waterPrevious <= 0)) {
             toast.error('Por favor, informe a leitura inicial de água');
             setIsLoading(false);
             return;
           }
           
-          // Validar leitura atual de água
-          if (!waterCurrent || waterCurrent <= 0) {
+          if (!waterCurrent || typeof waterCurrent === 'string' || waterCurrent <= 0) {
             toast.error('Por favor, informe a leitura atual de água');
             setIsLoading(false);
             return;
           }
           
-          // Verificar se a leitura atual é maior que a anterior
-          if (!isInitialWaterReading && waterCurrent <= waterPrevious) {
+          if (!isInitialWaterReading && typeof waterPrevious === 'number' && typeof waterCurrent === 'number' && waterCurrent <= waterPrevious) {
             toast.error('A leitura atual de água deve ser maior que a leitura anterior');
             setIsLoading(false);
             return;
