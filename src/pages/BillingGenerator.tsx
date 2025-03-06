@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import BillingGeneratorStep3 from "@/components/billing-generator/BillingGenerat
 import BillingGeneratorStep4 from "@/components/billing-generator/BillingGeneratorStep4";
 import BillingGeneratorTabs from "@/components/billing-generator/BillingGeneratorTabs";
 import BillingGeneratorConsumption from "@/components/billing-generator/BillingGeneratorConsumption";
+import BillingGeneratorPDF from "@/components/billing-generator/BillingGeneratorPDF";
 
 // Define the steps of the billing generator process
 const STEPS = [
@@ -24,6 +26,7 @@ const STEPS = [
   { id: 3, name: "Itens de Cobrança" },
   { id: 4, name: "Configurações dos Boletos" },
   { id: 5, name: "Confirmar" },
+  { id: 6, name: "Gerar Faturas" },
 ];
 
 const BillingGenerator = () => {
@@ -83,9 +86,8 @@ const BillingGenerator = () => {
       description: "Os boletos foram gerados e estão disponíveis para download.",
     });
     
-    // Reset form and go back to step 1
-    setActiveStep(1);
-    // We would typically reset the form state here too
+    // Move to the next step (PDF generation)
+    nextStep();
   };
 
   // Render the current step
@@ -122,6 +124,12 @@ const BillingGenerator = () => {
       case 5:
         return (
           <BillingGeneratorStep4 
+            billingData={billingData} 
+          />
+        );
+      case 6:
+        return (
+          <BillingGeneratorPDF 
             billingData={billingData} 
           />
         );
@@ -166,15 +174,20 @@ const BillingGenerator = () => {
           <div></div> // Empty div to maintain space
         )}
         
-        {activeStep < STEPS.length ? (
+        {activeStep < 5 ? (
           <Button onClick={nextStep}>
             Avançar
             <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
-        ) : (
+        ) : activeStep === 5 ? (
           <Button onClick={handleSubmit}>
             <Check className="mr-2 h-4 w-4" />
             Confirmar
+          </Button>
+        ) : (
+          <Button variant="outline" onClick={() => setActiveStep(1)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar ao Início
           </Button>
         )}
       </div>
