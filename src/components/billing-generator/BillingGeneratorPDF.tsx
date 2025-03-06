@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +25,10 @@ import {
 } from "@/components/ui/table";
 import { Loader2, FileText, Download, BuildingIcon } from "lucide-react";
 import { fetchUnits, Unit } from "@/utils/consumptionUtils";
+import { 
+  generateAndDownloadInvoice, 
+  prepareInvoiceData 
+} from "@/utils/pdfUtils";
 import BillingGeneratorInvoice from "./BillingGeneratorInvoice";
 import BillingGeneratorInvoices from "./BillingGeneratorInvoices";
 
