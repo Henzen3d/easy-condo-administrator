@@ -236,13 +236,15 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
   
   if (billingData.includeGasConsumption && billingData.gasConsumptionItems) {
     gasConsumptionItems = billingData.gasConsumptionItems.filter((item: any) => 
-      item.unit === unitInfo.id.toString()
+      item.unit && unitInfo.id && 
+      item.unit.toString() === unitInfo.id.toString()
     );
   }
   
   if (billingData.includeWaterConsumption && billingData.waterConsumptionItems) {
     waterConsumptionItems = billingData.waterConsumptionItems.filter((item: any) => 
-      item.unit === unitInfo.id.toString()
+      item.unit && unitInfo.id &&
+      item.unit.toString() === unitInfo.id.toString()
     );
   }
   
