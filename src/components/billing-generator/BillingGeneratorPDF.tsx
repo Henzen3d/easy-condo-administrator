@@ -28,7 +28,7 @@ import { fetchUnits, Unit } from "@/utils/consumptionUtils";
 import { 
   generateAndDownloadInvoice, 
   prepareInvoiceData 
-} from "@/utils/pdfUtils";
+} from "@/utils/pdf";
 import BillingGeneratorInvoice from "./BillingGeneratorInvoice";
 import BillingGeneratorInvoices from "./BillingGeneratorInvoices";
 

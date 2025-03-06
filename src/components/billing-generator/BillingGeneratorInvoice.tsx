@@ -17,7 +17,7 @@ import {
   generateInvoicePDF,
   saveInvoiceToStorage,
   prepareInvoiceData
-} from "@/utils/pdfUtils";
+} from "@/utils/pdf";
 import { format } from "date-fns";
 import { Unit } from "@/utils/consumptionUtils";
 
