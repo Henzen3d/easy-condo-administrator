@@ -1,68 +1,19 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  FileText,
-  ArrowRight,
-  ArrowLeft,
-  Check,
-  Plus,
-  Download,
-} from "lucide-react";
-import BillingGeneratorStep1 from "@/components/billing-generator/BillingGeneratorStep1";
-import BillingGeneratorStep2 from "@/components/billing-generator/BillingGeneratorStep2";
-import BillingGeneratorStep3 from "@/components/billing-generator/BillingGeneratorStep3";
-import BillingGeneratorStep4 from "@/components/billing-generator/BillingGeneratorStep4";
 import BillingGeneratorTabs from "@/components/billing-generator/BillingGeneratorTabs";
-import BillingGeneratorConsumption from "@/components/billing-generator/BillingGeneratorConsumption";
-import BillingGeneratorPDF from "@/components/billing-generator/BillingGeneratorPDF";
-
-// Define the steps of the billing generator process
-const STEPS = [
-  { id: 1, name: "Geral" },
-  { id: 2, name: "Consumo" },
-  { id: 3, name: "Itens de Cobrança" },
-  { id: 4, name: "Configurações dos Boletos" },
-  { id: 5, name: "Confirmar" },
-  { id: 6, name: "Gerar Faturas" },
-];
+import { BillingGeneratorContent } from "@/components/billing-generator/BillingGeneratorContent";
+import { BillingGeneratorTabContent } from "@/components/billing-generator/BillingGeneratorTabContent";
+import { useBillingForm } from "@/hooks/use-billing-form";
+import { STEPS } from "@/components/billing-generator/BillingGeneratorSteps";
 
 const BillingGenerator = () => {
   const { toast } = useToast();
   const [activeStep, setActiveStep] = useState(1);
   const [activeTab, setActiveTab] = useState("generator"); // "generator", "history", "charges", "settings"
   
-  // Form state
-  const [billingData, setBillingData] = useState({
-    reference: { month: new Date().getMonth(), year: new Date().getFullYear() },
-    name: "",
-    dueDate: "",
-    includeGasConsumption: false,
-    includeWaterConsumption: false,
-    gasConsumptionItems: [],
-    waterConsumptionItems: [],
-    earlyPaymentDiscount: {
-      enabled: false,
-      dueDate: "",
-      discountType: "fixed", // "fixed" or "percentage"
-      discountValue: 0,
-    },
-    chargeItems: [],
-    targetUnits: "all", // "all" or specific unit ID
-    specificUnit: "",
-    statementPeriod: {
-      startDate: "",
-      endDate: "",
-    },
-    additionalMessage: "",
-  });
-
-  // Handle form data changes
-  const updateBillingData = (newData) => {
-    setBillingData(prevData => ({ ...prevData, ...newData }));
-  };
+  // Use the custom hook for form state management
+  const { billingData, updateBillingData } = useBillingForm();
 
   // Navigate to next step
   const nextStep = () => {
@@ -78,6 +29,11 @@ const BillingGenerator = () => {
     }
   };
 
+  // Reset the step to 1
+  const resetStep = () => {
+    setActiveStep(1);
+  };
+
   // Handle form submission
   const handleSubmit = () => {
     // Here we would handle the actual submission, API calls, etc.
@@ -88,110 +44,6 @@ const BillingGenerator = () => {
     
     // Move to the next step (PDF generation)
     nextStep();
-  };
-
-  // Render the current step
-  const renderStep = () => {
-    switch (activeStep) {
-      case 1:
-        return (
-          <BillingGeneratorStep1 
-            billingData={billingData} 
-            updateBillingData={updateBillingData} 
-          />
-        );
-      case 2:
-        return (
-          <BillingGeneratorConsumption
-            billingData={billingData}
-            updateBillingData={updateBillingData}
-          />
-        );
-      case 3:
-        return (
-          <BillingGeneratorStep2 
-            billingData={billingData} 
-            updateBillingData={updateBillingData} 
-          />
-        );
-      case 4:
-        return (
-          <BillingGeneratorStep3 
-            billingData={billingData} 
-            updateBillingData={updateBillingData} 
-          />
-        );
-      case 5:
-        return (
-          <BillingGeneratorStep4 
-            billingData={billingData} 
-          />
-        );
-      case 6:
-        return (
-          <BillingGeneratorPDF 
-            billingData={billingData} 
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
-  // Prepare all charge items including consumption items
-  const prepareAllChargeItems = () => {
-    let allItems = [...billingData.chargeItems];
-    
-    if (billingData.includeGasConsumption && billingData.gasConsumptionItems.length > 0) {
-      allItems = [...allItems, ...billingData.gasConsumptionItems];
-    }
-    
-    if (billingData.includeWaterConsumption && billingData.waterConsumptionItems.length > 0) {
-      allItems = [...allItems, ...billingData.waterConsumptionItems];
-    }
-    
-    return allItems;
-  };
-
-  // Update charge items when moving to step 3
-  useEffect(() => {
-    if (activeStep === 3) {
-      const allItems = prepareAllChargeItems();
-      updateBillingData({ chargeItems: allItems });
-    }
-  }, [activeStep]);
-
-  // Render the navigation buttons
-  const renderNavButtons = () => {
-    return (
-      <div className="flex justify-between mt-6">
-        {activeStep > 1 ? (
-          <Button variant="outline" onClick={prevStep}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar
-          </Button>
-        ) : (
-          <div></div> // Empty div to maintain space
-        )}
-        
-        {activeStep < 5 ? (
-          <Button onClick={nextStep}>
-            Avançar
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        ) : activeStep === 5 ? (
-          <Button onClick={handleSubmit}>
-            <Check className="mr-2 h-4 w-4" />
-            Confirmar
-          </Button>
-        ) : (
-          <Button variant="outline" onClick={() => setActiveStep(1)}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Voltar ao Início
-          </Button>
-        )}
-      </div>
-    );
   };
 
   return (
@@ -211,112 +63,22 @@ const BillingGenerator = () => {
             <h2 className="text-2xl font-bold">Gerar Faturamento</h2>
           </div>
 
-          <Card>
-            <CardContent className="pt-6">
-              {/* Progress indicators */}
-              <div className="mb-6">
-                <div className="flex justify-between mb-2">
-                  {STEPS.map((step) => (
-                    <div 
-                      key={step.id}
-                      className={`flex flex-col items-center flex-1 ${step.id < activeStep 
-                        ? 'text-primary' 
-                        : step.id === activeStep 
-                          ? 'text-primary font-bold' 
-                          : 'text-muted-foreground'}`}
-                    >
-                      <div className={`rounded-full w-8 h-8 flex items-center justify-center mb-2 ${
-                        step.id < activeStep 
-                          ? 'bg-primary text-white' 
-                          : step.id === activeStep 
-                            ? 'border-2 border-primary text-primary' 
-                            : 'border border-muted-foreground text-muted-foreground'
-                      }`}>
-                        {step.id}
-                      </div>
-                      <span className="text-sm hidden md:block">{step.name}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="relative flex h-1 bg-muted">
-                  <div 
-                    className="absolute bg-primary h-1 transition-all duration-300"
-                    style={{ width: `${((activeStep - 1) / (STEPS.length - 1)) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-
-              {/* Current step content */}
-              {renderStep()}
-
-              {/* Navigation buttons */}
-              {renderNavButtons()}
-            </CardContent>
-          </Card>
+          <BillingGeneratorContent 
+            activeStep={activeStep}
+            billingData={billingData}
+            updateBillingData={updateBillingData}
+            nextStep={nextStep}
+            prevStep={prevStep}
+            handleSubmit={handleSubmit}
+          />
         </>
       )}
 
-      {activeTab === "history" && (
-        <div className="grid gap-4">
-          <div className="flex justify-between">
-            <h2 className="text-2xl font-bold">Histórico de Faturamentos</h2>
-            <Button variant="outline" className="gap-2">
-              <Download size={16} />
-              Exportar
-            </Button>
-          </div>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center py-8 text-muted-foreground">
-                <FileText className="mx-auto h-12 w-12 mb-4" />
-                <p>Nenhum faturamento encontrado</p>
-                <Button className="mt-4" onClick={() => setActiveTab("generator")}>
-                  Gerar Novo Faturamento
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === "charges" && (
-        <div className="grid gap-4">
-          <div className="flex justify-between">
-            <h2 className="text-2xl font-bold">Cobranças Lançadas</h2>
-            <Button variant="outline" className="gap-2">
-              <Download size={16} />
-              Exportar
-            </Button>
-          </div>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center py-8 text-muted-foreground">
-                <FileText className="mx-auto h-12 w-12 mb-4" />
-                <p>Nenhuma cobrança lançada encontrada</p>
-                <Button className="mt-4" onClick={() => setActiveTab("generator")}>
-                  Gerar Novo Faturamento
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {activeTab === "settings" && (
-        <div className="grid gap-4">
-          <h2 className="text-2xl font-bold">Configurações de Pagamento</h2>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center py-8 text-muted-foreground">
-                <p>As configurações de pagamento serão implementadas em breve.</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* Display other tabs content (history, charges, settings) */}
+      <BillingGeneratorTabContent 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+      />
     </div>
   );
 };
