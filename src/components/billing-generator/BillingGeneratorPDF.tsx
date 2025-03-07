@@ -75,9 +75,12 @@ const BillingGeneratorPDF = ({ billingData }: BillingGeneratorPDFProps) => {
     if (billingData.targetUnits === "all") {
       // Return all units
       return units;
+    } else if (typeof billingData.targetUnits === 'string' && billingData.targetUnits !== "all") {
+      // Return specific unit by ID
+      return units.filter(unit => String(unit.id) === String(billingData.targetUnits));
     } else {
-      // Return specific unit
-      return units.filter(unit => unit.id === parseInt(billingData.targetUnits));
+      // Return all units as fallback
+      return units;
     }
   };
 
@@ -95,19 +98,26 @@ const BillingGeneratorPDF = ({ billingData }: BillingGeneratorPDFProps) => {
       // Create a new JSZip instance
       const zip = new JSZip();
       
+      // Show how many invoices are being generated
+      console.log(`Generating invoices for ${relevantUnits.length} units`);
+      
       // Generate invoices for each unit and add to zip
       for (const unit of relevantUnits) {
         console.log(`Gerando fatura para unidade ${unit.block}-${unit.number}`);
         const invoiceData = prepareInvoiceData(billingData, unit);
-        console.log("Invoice data prepared:", invoiceData);
         
-        const pdfBlob = await generateInvoicePDF(invoiceData);
-        
-        // Generate filename based on unit and date
-        const fileName = `fatura_${unit.block}-${unit.number}_${getMonthName(invoiceData.referenceMonth)}_${invoiceData.referenceYear}.pdf`;
-        
-        // Add the PDF to the zip file
-        zip.file(fileName, pdfBlob);
+        try {
+          const pdfBlob = await generateInvoicePDF(invoiceData);
+          
+          // Generate filename based on unit and date
+          const fileName = `fatura_${unit.block}-${unit.number}_${getMonthName(invoiceData.referenceMonth)}_${invoiceData.referenceYear}.pdf`;
+          
+          // Add the PDF to the zip file
+          zip.file(fileName, pdfBlob);
+          console.log(`Added invoice for unit ${unit.block}-${unit.number} to zip`);
+        } catch (err) {
+          console.error(`Error generating invoice for unit ${unit.block}-${unit.number}:`, err);
+        }
       }
       
       // Generate the zip file
@@ -117,7 +127,14 @@ const BillingGeneratorPDF = ({ billingData }: BillingGeneratorPDFProps) => {
       const url = URL.createObjectURL(zipBlob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `faturas_${format(new Date(), 'yyyy-MM-dd')}.zip`;
+      
+      // Use the month and year from billing data for ZIP file name
+      const month = billingData.reference?.month !== undefined 
+                    ? getMonthName(billingData.reference.month) 
+                    : format(new Date(), 'MMMM');
+      const year = billingData.reference?.year || new Date().getFullYear();
+      
+      link.download = `faturas_${month}_${year}.zip`;
       
       // Trigger download
       document.body.appendChild(link);

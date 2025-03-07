@@ -118,11 +118,17 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
   // Generate PIX QR code if PIX info is available
   if (invoiceData.pixKey && invoiceData.beneficiaryName) {
     try {
+      const transactionId = invoiceData.transactionId || 
+                            `${invoiceData.unitBlock}${invoiceData.unitNumber}${invoiceData.referenceMonth}${invoiceData.referenceYear}`;
+      
+      const description = `Cond ${invoiceData.referenceMonth}/${invoiceData.referenceYear}`;
+      
       const qrCodeDataURL = await generatePixQRCode(
         invoiceData.pixKey,
         invoiceData.total,
-        invoiceData.transactionId || `${invoiceData.unitBlock}${invoiceData.unitNumber}${invoiceData.referenceMonth}${invoiceData.referenceYear}`,
-        invoiceData.beneficiaryName
+        transactionId,
+        invoiceData.beneficiaryName,
+        description
       );
       
       if (qrCodeDataURL) {
@@ -171,6 +177,119 @@ export const generateAndDownloadInvoice = async (invoiceData: InvoiceData): Prom
   }
 };
 
+// Function to prepare invoice data from billing data and unit information
+export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData => {
+  console.log("Preparing invoice data for unit:", unitInfo.id, unitInfo.block, unitInfo.number);
+  console.log("Billing data:", billingData);
+  
+  // ----- STEP 1: Filter items by type -----
+  
+  // 1. Global charges (for all units)
+  const globalCharges = billingData.chargeItems?.filter((item: any) => {
+    return item.targetUnits === "all" || !item.unit || item.unit === "all";
+  }) || [];
+  
+  console.log("Global charges:", globalCharges);
+  
+  // 2. Unit-specific charges
+  const unitSpecificCharges = billingData.chargeItems?.filter((item: any) => {
+    return item.targetUnits !== "all" && 
+           item.unit && 
+           item.unit !== "all" && 
+           String(item.unit) === String(unitInfo.id);
+  }) || [];
+  
+  console.log("Unit specific charges:", unitSpecificCharges);
+  
+  // 3. Gas consumption items for this unit only
+  let gasConsumptionItems = [];
+  if (billingData.includeGasConsumption && billingData.gasConsumptionItems) {
+    gasConsumptionItems = billingData.gasConsumptionItems.filter((item: any) => {
+      return String(item.unit) === String(unitInfo.id);
+    });
+  }
+  
+  console.log("Gas consumption items for this unit:", gasConsumptionItems);
+  
+  // 4. Water consumption items for this unit only
+  let waterConsumptionItems = [];
+  if (billingData.includeWaterConsumption && billingData.waterConsumptionItems) {
+    waterConsumptionItems = billingData.waterConsumptionItems.filter((item: any) => {
+      return String(item.unit) === String(unitInfo.id);
+    });
+  }
+  
+  console.log("Water consumption items for this unit:", waterConsumptionItems);
+  
+  // ----- STEP 2: Combine all items for this unit -----
+  const allUnitItems = [
+    ...globalCharges,
+    ...unitSpecificCharges,
+    ...gasConsumptionItems,
+    ...waterConsumptionItems
+  ];
+  
+  console.log("All items for this unit:", allUnitItems);
+  
+  // ----- STEP 3: Calculate financial totals -----
+  
+  // Calculate subtotal
+  const subtotal = allUnitItems.reduce(
+    (sum: number, item: any) => sum + parseFloat(item.value || 0), 
+    0
+  );
+  
+  // Calculate discount if applicable
+  let discountAmount = 0;
+  let discountObject = undefined;
+  
+  if (billingData.earlyPaymentDiscount?.enabled) {
+    discountObject = {
+      type: billingData.earlyPaymentDiscount.discountType as 'percentage' | 'fixed',
+      value: parseFloat(billingData.earlyPaymentDiscount.discountValue || 0)
+    };
+    
+    discountAmount = discountObject.type === 'percentage'
+      ? subtotal * (discountObject.value / 100)
+      : discountObject.value;
+  }
+  
+  // Calculate final amount
+  const totalAmount = subtotal - discountAmount;
+  
+  // ----- STEP 4: Prepare final invoice data object -----
+  return {
+    condoName: "Meu Condomínio",
+    condoAddress: "RUA ALEGRE, 123 - CIDADE BRASILEIRA",
+    condoPhone: "(12) 3456-7890",
+    condoWebsite: "WWW.GRANDESITE.COM.BR",
+    condoEmail: "contato@grandesite.com.br",
+    
+    residentName: unitInfo.owner || billingData.resident || "Morador",
+    unitNumber: unitInfo.number || "101",
+    unitBlock: unitInfo.block || "A",
+    contactPhone: "(47) 3456-7890",
+    
+    referenceMonth: billingData.reference?.month !== undefined ? billingData.reference.month : new Date().getMonth(),
+    referenceYear: billingData.reference?.year || new Date().getFullYear(),
+    dueDate: billingData.dueDate || new Date().toISOString(),
+    
+    items: allUnitItems.map((item: any) => ({
+      description: item.description || "",
+      category: item.category || "Geral",
+      value: parseFloat(item.value || 0)
+    })),
+    
+    subtotal,
+    discount: discountObject,
+    total: totalAmount,
+    
+    pixKey: "05351196000187", // Use CNPJ as an example or email or a CPF number
+    transactionId: `${unitInfo.block || "A"}${unitInfo.number || "101"}${billingData.reference?.month || new Date().getMonth()}${billingData.reference?.year || new Date().getFullYear()}`,
+    beneficiaryName: "CONDOMINIO EXEMPLO"
+  };
+};
+
 // Generate mock invoice data for testing
 export const generateMockInvoiceData = (billingData: any): InvoiceData => {
   // Get the unit information from billing data
@@ -187,7 +306,7 @@ export const generateMockInvoiceData = (billingData: any): InvoiceData => {
     condoAddress: "RUA ALEGRE, 123 - CIDADE BRASILEIRA",
     condoPhone: "(12) 3456-7890",
     condoWebsite: "WWW.GRANDESITE.COM.BR",
-    condoEmail: "@grandesite",
+    condoEmail: "contato@grandesite.com.br",
     
     residentName: billingData.resident || "PEDRO FERNANDES",
     unitNumber: unitDisplay.number,
@@ -213,115 +332,8 @@ export const generateMockInvoiceData = (billingData: any): InvoiceData => {
       : undefined,
     total: billingData.chargeItems?.reduce((sum: number, item: any) => sum + parseFloat(item.value || 0), 0) || 0,
     
-    pixKey: "exemplo@pix.com",
+    pixKey: "05351196000187",
     transactionId: `${unitDisplay.block}${unitDisplay.number}${billingData.reference?.month || new Date().getMonth()}${billingData.reference?.year || new Date().getFullYear()}`,
-    beneficiaryName: "CONDOMINIO EXEMPLO"
-  };
-};
-
-// Function to prepare invoice data from billing data and unit information
-export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData => {
-  console.log("Preparing invoice data for unit:", unitInfo.id, unitInfo.block, unitInfo.number);
-  console.log("Billing data:", billingData);
-  
-  // 1. Filtrar itens gerais (sem unidade específica ou aplicáveis a todas as unidades)
-  const generalChargeItems = billingData.chargeItems?.filter((item: any) => {
-    return !item.unit || item.unit === "all";
-  }) || [];
-  
-  console.log("General charge items:", generalChargeItems);
-  
-  // 2. Filtrar itens específicos para esta unidade
-  const unitSpecificChargeItems = billingData.chargeItems?.filter((item: any) => {
-    return item.unit && item.unit !== "all" && 
-           String(item.unit) === String(unitInfo.id);
-  }) || [];
-  
-  console.log("Unit specific charge items:", unitSpecificChargeItems);
-  
-  // 3. Filtrar itens de consumo de gás para esta unidade
-  let gasConsumptionItems = [];
-  if (billingData.includeGasConsumption && billingData.gasConsumptionItems) {
-    gasConsumptionItems = billingData.gasConsumptionItems.filter((item: any) => 
-      item.unit && String(item.unit) === String(unitInfo.id)
-    );
-  }
-  
-  console.log("Gas consumption items for this unit:", gasConsumptionItems);
-  
-  // 4. Filtrar itens de consumo de água para esta unidade
-  let waterConsumptionItems = [];
-  if (billingData.includeWaterConsumption && billingData.waterConsumptionItems) {
-    waterConsumptionItems = billingData.waterConsumptionItems.filter((item: any) => 
-      item.unit && String(item.unit) === String(unitInfo.id)
-    );
-  }
-  
-  console.log("Water consumption items for this unit:", waterConsumptionItems);
-  
-  // 5. Combinar todos os itens relevantes para esta unidade
-  const allUnitItems = [
-    ...generalChargeItems,
-    ...unitSpecificChargeItems,
-    ...gasConsumptionItems,
-    ...waterConsumptionItems
-  ];
-  
-  console.log("All items for this unit:", allUnitItems);
-  
-  // 6. Calcular o subtotal
-  const subtotal = allUnitItems.reduce(
-    (sum: number, item: any) => sum + parseFloat(item.value || 0), 
-    0
-  );
-  
-  // 7. Calcular desconto se aplicável
-  let discountAmount = 0;
-  let discountObject = undefined;
-  
-  if (billingData.earlyPaymentDiscount?.enabled) {
-    discountObject = {
-      type: billingData.earlyPaymentDiscount.discountType as 'percentage' | 'fixed',
-      value: parseFloat(billingData.earlyPaymentDiscount.discountValue || 0)
-    };
-    
-    discountAmount = discountObject.type === 'percentage'
-      ? subtotal * (discountObject.value / 100)
-      : discountObject.value;
-  }
-  
-  // 8. Calcular valor final
-  const totalAmount = subtotal - discountAmount;
-  
-  // 9. Preparar e retornar objeto da fatura
-  return {
-    condoName: "Meu Condomínio",
-    condoAddress: "RUA ALEGRE, 123 - CIDADE BRASILEIRA",
-    condoPhone: "(12) 3456-7890",
-    condoWebsite: "WWW.GRANDESITE.COM.BR",
-    condoEmail: "@grandesite",
-    
-    residentName: unitInfo.owner || billingData.resident || "Morador",
-    unitNumber: unitInfo.number || "101",
-    unitBlock: unitInfo.block || "A",
-    contactPhone: "(47) 3456-7890",
-    
-    referenceMonth: billingData.reference?.month !== undefined ? billingData.reference.month : new Date().getMonth(),
-    referenceYear: billingData.reference?.year || new Date().getFullYear(),
-    dueDate: billingData.dueDate || new Date().toISOString(),
-    
-    items: allUnitItems.map((item: any) => ({
-      description: item.description,
-      category: item.category,
-      value: parseFloat(item.value || 0)
-    })),
-    
-    subtotal,
-    discount: discountObject,
-    total: totalAmount,
-    
-    pixKey: "exemplo@pix.com",
-    transactionId: `${unitInfo.block || "A"}${unitInfo.number || "101"}${billingData.reference?.month || new Date().getMonth()}${billingData.reference?.year || new Date().getFullYear()}`,
     beneficiaryName: "CONDOMINIO EXEMPLO"
   };
 };

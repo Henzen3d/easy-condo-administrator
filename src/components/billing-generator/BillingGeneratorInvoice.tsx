@@ -32,20 +32,27 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [invoiceUrl, setInvoiceUrl] = useState<string | null>(null);
 
-  // Generate invoice and handle download
-  const handleDownloadInvoice = async () => {
+  // Generate invoice and show dialog with preview
+  const handleGenerateInvoiceWithPreview = async () => {
     try {
       setIsGenerating(true);
       
       // Prepare invoice data from billing data and unit info
       const invoiceData = prepareInvoiceData(billingData, unit);
       
-      // Generate and download the invoice
-      await generateAndDownloadInvoice(invoiceData);
+      // Generate PDF blob
+      const pdfBlob = await generateInvoicePDF(invoiceData);
+      
+      // Create URL for preview
+      const url = URL.createObjectURL(pdfBlob);
+      setInvoiceUrl(url);
+      
+      // Open dialog to show preview
+      setIsDialogOpen(true);
       
       toast({
         title: "Fatura gerada com sucesso",
-        description: "O download da fatura foi iniciado.",
+        description: `Fatura para unidade ${unit.block}-${unit.number} pronta para visualização.`,
       });
     } catch (error) {
       console.error("Erro ao gerar fatura:", error);
@@ -59,7 +66,7 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
     }
   };
 
-  // Generate invoice (just downloads directly for now)
+  // Generate invoice and handle download directly
   const handleGenerateInvoice = async () => {
     try {
       setIsGenerating(true);
@@ -89,6 +96,18 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
     }
   };
 
+  // Handle downloading the invoice from dialog
+  const handleDownloadInvoice = () => {
+    if (invoiceUrl) {
+      const link = document.createElement('a');
+      link.href = invoiceUrl;
+      link.download = `fatura_${unit.block}-${unit.number}_${format(new Date(), 'yyyy-MM-dd')}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
   // Handle printing the invoice
   const handlePrintInvoice = () => {
     if (invoiceUrl) {
@@ -108,6 +127,15 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
       title: "E-mail enviado",
       description: "A fatura foi enviada por e-mail para o morador.",
     });
+  };
+
+  // Cleanup URL when dialog closes
+  const handleDialogOpenChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open && invoiceUrl) {
+      URL.revokeObjectURL(invoiceUrl);
+      setInvoiceUrl(null);
+    }
   };
 
   return (
@@ -130,7 +158,7 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
         )}
       </Button>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Fatura Gerada</DialogTitle>
