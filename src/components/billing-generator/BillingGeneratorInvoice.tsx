@@ -40,6 +40,11 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
       // Prepare invoice data from billing data and unit info
       const invoiceData = prepareInvoiceData(billingData, unit);
       
+      // Add a default PIX key if one isn't provided
+      if (!invoiceData.pixKey) {
+        invoiceData.pixKey = "47988131910"; // Default phone number PIX key
+      }
+      
       console.log("Generated invoice data for preview:", invoiceData);
       
       // Generate PDF blob
@@ -75,6 +80,11 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
       
       // Prepare invoice data with correct filtering for this unit
       const invoiceData = prepareInvoiceData(billingData, unit);
+      
+      // Add a default PIX key if one isn't provided
+      if (!invoiceData.pixKey) {
+        invoiceData.pixKey = "47988131910"; // Default phone number PIX key
+      }
       
       console.log("Generating invoice for unit:", unit.id, unit.block, unit.number);
       console.log("Invoice data:", invoiceData);

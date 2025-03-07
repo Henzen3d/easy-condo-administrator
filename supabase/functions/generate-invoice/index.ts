@@ -79,6 +79,21 @@ serve(async (req) => {
       }
     }
 
+    // Check if PIX key is available, if not, use default phone number
+    if (!invoiceData.pixKey) {
+      invoiceData.pixKey = "47988131910"; // Default phone number PIX key
+    }
+
+    // Ensure there is a transaction ID for the PIX code
+    if (!invoiceData.transactionId) {
+      invoiceData.transactionId = `${invoiceData.unitBlock}${invoiceData.unitNumber}${invoiceData.referenceMonth}${invoiceData.referenceYear}`;
+    }
+
+    // Ensure there's a beneficiary name for the PIX
+    if (!invoiceData.beneficiaryName) {
+      invoiceData.beneficiaryName = "CONDOMINIO EXEMPLO";
+    }
+
     // In a real implementation, you would:
     // 1. Generate the PDF on the server using a library like PDFKit
     // 2. Save it to Supabase Storage
@@ -92,7 +107,13 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         message: "Invoice generated successfully",
-        invoiceUrl: simulatedUrl
+        invoiceUrl: simulatedUrl,
+        pixData: {
+          key: invoiceData.pixKey,
+          transactionId: invoiceData.transactionId,
+          beneficiaryName: invoiceData.beneficiaryName,
+          amount: invoiceData.total
+        }
       }),
       { 
         headers: { 

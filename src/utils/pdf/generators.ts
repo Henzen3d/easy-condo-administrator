@@ -96,7 +96,7 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
   });
   
   // Calculate final table position
-  const finalY = (pdf as any).lastAutoTable.finalY + 20;
+  const finalY = (pdf as any).lastAutoTable.finalY + 10;
   
   // Add payment information
   pdf.setFont('helvetica', 'bold');
@@ -115,12 +115,16 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
   pdf.setFont('helvetica', 'bold');
   pdf.text(formatCurrency(invoiceData.total), 145, finalY + 8);
   
-  // Generate PIX QR code if PIX info is available
-  // Fixed positioning to avoid overlapping with other content
+  // Add due date information - positioned to not overlap with QR code
+  pdf.setTextColor(50, 50, 50);
+  pdf.setFontSize(10);
+  pdf.text(`Data de vencimento: ${format(new Date(invoiceData.dueDate), 'dd/MM/yyyy')}`, 140, finalY + 25);
+  
+  // Generate PIX QR code with improved positioning
   if (invoiceData.pixKey && invoiceData.beneficiaryName) {
     try {
       const transactionId = invoiceData.transactionId || 
-                            `${invoiceData.unitBlock}${invoiceData.unitNumber}${invoiceData.referenceMonth}${invoiceData.referenceYear}`;
+                           `${invoiceData.unitBlock}${invoiceData.unitNumber}${invoiceData.referenceMonth}${invoiceData.referenceYear}`;
       
       const description = `Cond ${invoiceData.referenceMonth}/${invoiceData.referenceYear}`;
       
@@ -133,28 +137,23 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
       );
       
       if (qrCodeDataURL) {
-        // Improved positioning to avoid overlapping with text
-        // Move QR code to right side of the page
-        pdf.addImage(qrCodeDataURL, 'PNG', 20, finalY + 15, 40, 40);
+        // Add QR code on the bottom left with better spacing
+        pdf.addImage(qrCodeDataURL, 'PNG', 20, finalY + 20, 45, 45);
         
-        // Add text next to QR code
+        // Add text to the right of QR code
         pdf.setTextColor(50, 50, 50);
         pdf.setFontSize(10);
         pdf.setFont('helvetica', 'bold');
-        pdf.text('Escaneie o código PIX:', 65, finalY + 25);
+        pdf.text('Escaneie o código PIX:', 70, finalY + 30);
         pdf.setFont('helvetica', 'normal');
-        pdf.text('Use o aplicativo do seu banco para pagar', 65, finalY + 32);
-        pdf.text('via PIX usando este QR Code.', 65, finalY + 38);
+        pdf.text('Use o aplicativo do seu banco para', 70, finalY + 38);
+        pdf.text('pagar via PIX usando este QR Code.', 70, finalY + 46);
+        pdf.text(`Chave PIX: ${formatPixKeyForDisplay(invoiceData.pixKey)}`, 70, finalY + 56);
       }
     } catch (error) {
       console.error('Error adding QR code to PDF:', error);
     }
   }
-  
-  // Add due date information - moved below QR code to avoid overlapping
-  pdf.setTextColor(50, 50, 50);
-  pdf.setFontSize(10);
-  pdf.text(`Data de vencimento: ${format(new Date(invoiceData.dueDate), 'dd/MM/yyyy')}`, 140, finalY + 25);
   
   // Add footer
   pdf.setTextColor(150, 150, 150);
@@ -164,6 +163,35 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
   // Generate the PDF as blob
   return pdf.output('blob');
 };
+
+// Function to format PIX key for better display
+function formatPixKeyForDisplay(pixKey: string): string {
+  if (!pixKey) return '';
+  
+  // Format based on apparent type
+  if (pixKey.includes('@')) {
+    return pixKey; // Email
+  } else if (pixKey.length === 11 && /^\d+$/.test(pixKey)) {
+    // CPF format: 123.456.789-00
+    return pixKey.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  } else if (pixKey.length === 14 && /^\d+$/.test(pixKey)) {
+    // CNPJ format: 12.345.678/0001-90
+    return pixKey.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  } else if (/^\d+$/.test(pixKey) && (pixKey.length >= 10 && pixKey.length <= 11)) {
+    // Phone number: (11) 99999-9999
+    if (pixKey.length === 11) {
+      return pixKey.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
+    } else {
+      return pixKey.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
+    }
+  } else {
+    // Random key - show first 8 chars and last 4
+    if (pixKey.length > 12) {
+      return `${pixKey.substring(0, 8)}...${pixKey.substring(pixKey.length - 4)}`;
+    }
+    return pixKey;
+  }
+}
 
 // Function to generate and download invoice PDF
 export const generateAndDownloadInvoice = async (invoiceData: InvoiceData): Promise<void> => {
@@ -250,17 +278,21 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
     ...waterConsumptionItems
   ];
   
-  // Remove potential duplicates by using item ids or creating a composite key
-  const seenIds = new Set();
-  const uniqueItems = allUnitItems.filter(item => {
-    // Create a composite key using all available unique identifiers
-    const compositeKey = `${item.id || ''}:${item.category || ''}:${item.description || ''}:${item.value || ''}:${item.unit || ''}`;
-    if (seenIds.has(compositeKey)) {
-      return false; // This is a duplicate
+  // Create a map to track unique items by a composite key
+  const uniqueItemsMap = new Map();
+  
+  allUnitItems.forEach(item => {
+    // Create a composite key using relevant properties
+    const compositeKey = `${item.category || ''}:${item.description || ''}:${item.value || ''}`;
+    
+    // Only add if this item hasn't been seen before
+    if (!uniqueItemsMap.has(compositeKey)) {
+      uniqueItemsMap.set(compositeKey, item);
     }
-    seenIds.add(compositeKey);
-    return true; // This is unique
   });
+  
+  // Convert map values back to array
+  const uniqueItems = Array.from(uniqueItemsMap.values());
   
   console.log("All unique items for this unit:", uniqueItems);
   
@@ -317,7 +349,8 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
     discount: discountObject,
     total: totalAmount,
     
-    pixKey: "05351196000187", // Use CNPJ as an example or email or a CPF number
+    // Use phone number PIX key as default
+    pixKey: "47988131910",
     transactionId: `${unitInfo.block || "A"}${unitInfo.number || "101"}${billingData.reference?.month || new Date().getMonth()}${billingData.reference?.year || new Date().getFullYear()}`,
     beneficiaryName: "CONDOMINIO EXEMPLO"
   };
@@ -365,7 +398,7 @@ export const generateMockInvoiceData = (billingData: any): InvoiceData => {
       : undefined,
     total: billingData.chargeItems?.reduce((sum: number, item: any) => sum + parseFloat(item.value || 0), 0) || 0,
     
-    pixKey: "05351196000187",
+    pixKey: "47988131910",
     transactionId: `${unitDisplay.block}${unitDisplay.number}${billingData.reference?.month || new Date().getMonth()}${billingData.reference?.year || new Date().getFullYear()}`,
     beneficiaryName: "CONDOMINIO EXEMPLO"
   };
