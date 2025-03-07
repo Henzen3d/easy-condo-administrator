@@ -27,13 +27,13 @@ export const generatePixQRCode = async (
     // Format amount with 2 decimal places and no thousands separator
     const formattedValue = value.toFixed(2);
     
-    // Create basic payload elements
+    // Create basic payload elements according to EMV QR Code standards
     const payload = [
-      '00020126', // Payload Format Indicator and Merchant Account Information template
-      `0014BR.GOV.BCB.PIX`, // PIX GUI domain
+      '00020126', // Payload Format Indicator (01) + Merchant Account Information template (26)
+      '0014BR.GOV.BCB.PIX', // PIX GUI domain (Brazilian Central Bank)
     ];
     
-    // Add PIX key (depends on key type)
+    // Add PIX key based on key type
     if (isEmail(pixKey)) {
       payload.push(`01${pixKey.length.toString().padStart(2, '0')}${pixKey}`);
     } else if (isPhoneNumber(pixKey)) {
@@ -49,40 +49,38 @@ export const generatePixQRCode = async (
       payload.push(`01${pixKey.length.toString().padStart(2, '0')}${pixKey}`);
     }
     
+    // Merchant Category Code (fixed at 0000 for PIX)
+    payload.push('52040000');
+    
+    // Transaction Currency (986 = BRL)
+    payload.push('5303986');
+    
     // Transaction amount
-    payload.push(`5204000053039865${formattedValue.length.toString().padStart(2, '0')}${formattedValue}`);
+    payload.push(`54${formattedValue.length.toString().padStart(2, '0')}${formattedValue}`);
     
     // Country code
     payload.push('5802BR');
     
-    // Beneficiary name
+    // Beneficiary name (merchant name)
     payload.push(`59${sanitizedBeneficiaryName.length.toString().padStart(2, '0')}${sanitizedBeneficiaryName}`);
     
     // City
     payload.push(`60${city.length.toString().padStart(2, '0')}${city}`);
     
     // Additional info - txid for tracking
-    const txidField = `05${transactionId.substring(0, 25)}`;
-    payload.push(`62${(txidField.length + 4).toString().padStart(2, '0')}${txidField}`);
+    // Create the additional field with transaction ID
+    let additionalDataField = `05${transactionId.substring(0, 25)}`;
     
     // Add description if provided (in reference label field)
     if (sanitizedDescription) {
       const referenceLabel = `05${sanitizedDescription}`;
-      if (!payload[payload.length - 1].startsWith('62')) {
-        // Create additional data field if not exists
-        payload.push(`62${(referenceLabel.length + 4).toString().padStart(2, '0')}${referenceLabel}`);
-      } else {
-        // Add to existing additional data field
-        const currentAdditionalData = payload[payload.length - 1];
-        const currentLength = parseInt(currentAdditionalData.substring(2, 4));
-        const newAdditionalData = currentAdditionalData.substring(0, 2) + 
-          (currentLength + referenceLabel.length).toString().padStart(2, '0') + 
-          currentAdditionalData.substring(4) + referenceLabel;
-        payload[payload.length - 1] = newAdditionalData;
-      }
+      additionalDataField += referenceLabel;
     }
     
-    // Add CRC (calculated later)
+    // Add the additional data field with proper length
+    payload.push(`62${additionalDataField.length.toString().padStart(2, '0')}${additionalDataField}`);
+    
+    // Add CRC placeholder (calculated later)
     payload.push('6304');
     
     // Join all fields into raw payload
@@ -94,11 +92,11 @@ export const generatePixQRCode = async (
     
     console.log('Generated PIX payload:', rawPayload);
     
-    // Generate QR code as data URL
+    // Generate QR code as data URL with error correction for better scanning
     const qrCodeDataURL = await QRCode.toDataURL(rawPayload, {
       width: 240,
       margin: 1,
-      errorCorrectionLevel: 'M',
+      errorCorrectionLevel: 'H', // High error correction for better scanning
       color: {
         dark: '#000000',
         light: '#FFFFFF'

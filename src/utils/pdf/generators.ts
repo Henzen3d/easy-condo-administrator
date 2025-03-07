@@ -116,6 +116,7 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
   pdf.text(formatCurrency(invoiceData.total), 145, finalY + 8);
   
   // Generate PIX QR code if PIX info is available
+  // Fixed positioning to avoid overlapping with other content
   if (invoiceData.pixKey && invoiceData.beneficiaryName) {
     try {
       const transactionId = invoiceData.transactionId || 
@@ -132,17 +133,28 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
       );
       
       if (qrCodeDataURL) {
-        pdf.addImage(qrCodeDataURL, 'PNG', 70, finalY - 10, 40, 40);
+        // Improved positioning to avoid overlapping with text
+        // Move QR code to right side of the page
+        pdf.addImage(qrCodeDataURL, 'PNG', 20, finalY + 15, 40, 40);
+        
+        // Add text next to QR code
+        pdf.setTextColor(50, 50, 50);
+        pdf.setFontSize(10);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Escaneie o código PIX:', 65, finalY + 25);
+        pdf.setFont('helvetica', 'normal');
+        pdf.text('Use o aplicativo do seu banco para pagar', 65, finalY + 32);
+        pdf.text('via PIX usando este QR Code.', 65, finalY + 38);
       }
     } catch (error) {
       console.error('Error adding QR code to PDF:', error);
     }
   }
   
-  // Add due date information
+  // Add due date information - moved below QR code to avoid overlapping
   pdf.setTextColor(50, 50, 50);
   pdf.setFontSize(10);
-  pdf.text(`Data de vencimento: ${format(new Date(invoiceData.dueDate), 'dd/MM/yyyy')}`, 20, finalY + 20);
+  pdf.text(`Data de vencimento: ${format(new Date(invoiceData.dueDate), 'dd/MM/yyyy')}`, 140, finalY + 25);
   
   // Add footer
   pdf.setTextColor(150, 150, 150);
@@ -180,23 +192,29 @@ export const generateAndDownloadInvoice = async (invoiceData: InvoiceData): Prom
 // Function to prepare invoice data from billing data and unit information
 export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData => {
   console.log("Preparing invoice data for unit:", unitInfo.id, unitInfo.block, unitInfo.number);
-  console.log("Billing data:", billingData);
   
   // ----- STEP 1: Filter items by type -----
   
-  // 1. Global charges (for all units)
+  // 1. Global charges (for all units) - These are charges that apply to every unit
   const globalCharges = billingData.chargeItems?.filter((item: any) => {
-    return item.targetUnits === "all" || !item.unit || item.unit === "all";
+    return (item.targetUnits === "all" || 
+           !item.unit || 
+           item.unit === "all" || 
+           item.unit === "" || 
+           item.unit === null);
   }) || [];
   
   console.log("Global charges:", globalCharges);
   
-  // 2. Unit-specific charges
+  // 2. Unit-specific charges - These are charges targeted specifically to this unit
   const unitSpecificCharges = billingData.chargeItems?.filter((item: any) => {
-    return item.targetUnits !== "all" && 
+    // Only include charges specifically for this unit
+    return (item.targetUnits !== "all" && 
            item.unit && 
            item.unit !== "all" && 
-           String(item.unit) === String(unitInfo.id);
+           item.unit !== "" && 
+           item.unit !== null && 
+           String(item.unit) === String(unitInfo.id));
   }) || [];
   
   console.log("Unit specific charges:", unitSpecificCharges);
@@ -204,6 +222,7 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
   // 3. Gas consumption items for this unit only
   let gasConsumptionItems = [];
   if (billingData.includeGasConsumption && billingData.gasConsumptionItems) {
+    // Filter gas consumption items to include ONLY those for this specific unit
     gasConsumptionItems = billingData.gasConsumptionItems.filter((item: any) => {
       return String(item.unit) === String(unitInfo.id);
     });
@@ -214,6 +233,7 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
   // 4. Water consumption items for this unit only
   let waterConsumptionItems = [];
   if (billingData.includeWaterConsumption && billingData.waterConsumptionItems) {
+    // Filter water consumption items to include ONLY those for this specific unit
     waterConsumptionItems = billingData.waterConsumptionItems.filter((item: any) => {
       return String(item.unit) === String(unitInfo.id);
     });
@@ -222,6 +242,7 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
   console.log("Water consumption items for this unit:", waterConsumptionItems);
   
   // ----- STEP 2: Combine all items for this unit -----
+  // Make sure there are no duplicates
   const allUnitItems = [
     ...globalCharges,
     ...unitSpecificCharges,
@@ -229,12 +250,24 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
     ...waterConsumptionItems
   ];
   
-  console.log("All items for this unit:", allUnitItems);
+  // Remove potential duplicates by using item ids or creating a composite key
+  const seenIds = new Set();
+  const uniqueItems = allUnitItems.filter(item => {
+    // Create a composite key using all available unique identifiers
+    const compositeKey = `${item.id || ''}:${item.category || ''}:${item.description || ''}:${item.value || ''}:${item.unit || ''}`;
+    if (seenIds.has(compositeKey)) {
+      return false; // This is a duplicate
+    }
+    seenIds.add(compositeKey);
+    return true; // This is unique
+  });
+  
+  console.log("All unique items for this unit:", uniqueItems);
   
   // ----- STEP 3: Calculate financial totals -----
   
-  // Calculate subtotal
-  const subtotal = allUnitItems.reduce(
+  // Calculate subtotal from unique items only
+  const subtotal = uniqueItems.reduce(
     (sum: number, item: any) => sum + parseFloat(item.value || 0), 
     0
   );
@@ -274,7 +307,7 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
     referenceYear: billingData.reference?.year || new Date().getFullYear(),
     dueDate: billingData.dueDate || new Date().toISOString(),
     
-    items: allUnitItems.map((item: any) => ({
+    items: uniqueItems.map((item: any) => ({
       description: item.description || "",
       category: item.category || "Geral",
       value: parseFloat(item.value || 0)

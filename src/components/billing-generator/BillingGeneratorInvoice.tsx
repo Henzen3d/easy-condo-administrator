@@ -40,6 +40,8 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
       // Prepare invoice data from billing data and unit info
       const invoiceData = prepareInvoiceData(billingData, unit);
       
+      console.log("Generated invoice data for preview:", invoiceData);
+      
       // Generate PDF blob
       const pdfBlob = await generateInvoicePDF(invoiceData);
       
