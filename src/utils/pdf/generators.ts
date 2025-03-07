@@ -221,47 +221,61 @@ export const generateMockInvoiceData = (billingData: any): InvoiceData => {
 
 // Function to prepare invoice data from billing data and unit information
 export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData => {
-  // Filter charge items to include only items that belong to all units or specifically to this unit
-  const filteredChargeItems = billingData.chargeItems?.filter((item: any) => {
-    // Incluir itens gerais sem unidade específica
-    if (!item.unit) return true;
-    
-    // Verificar se item é específico desta unidade
-    return item.unit === unitInfo.id.toString();
+  console.log("Preparing invoice data for unit:", unitInfo.id, unitInfo.block, unitInfo.number);
+  console.log("Billing data:", billingData);
+  
+  // 1. Filtrar itens gerais (sem unidade específica ou aplicáveis a todas as unidades)
+  const generalChargeItems = billingData.chargeItems?.filter((item: any) => {
+    return !item.unit || item.unit === "all";
   }) || [];
   
-  // Filter consumption items specifically for this unit
-  let gasConsumptionItems = [];
-  let waterConsumptionItems = [];
+  console.log("General charge items:", generalChargeItems);
   
+  // 2. Filtrar itens específicos para esta unidade
+  const unitSpecificChargeItems = billingData.chargeItems?.filter((item: any) => {
+    return item.unit && item.unit !== "all" && 
+           String(item.unit) === String(unitInfo.id);
+  }) || [];
+  
+  console.log("Unit specific charge items:", unitSpecificChargeItems);
+  
+  // 3. Filtrar itens de consumo de gás para esta unidade
+  let gasConsumptionItems = [];
   if (billingData.includeGasConsumption && billingData.gasConsumptionItems) {
     gasConsumptionItems = billingData.gasConsumptionItems.filter((item: any) => 
-      item.unit && unitInfo.id && 
-      item.unit.toString() === unitInfo.id.toString()
+      item.unit && String(item.unit) === String(unitInfo.id)
     );
   }
   
+  console.log("Gas consumption items for this unit:", gasConsumptionItems);
+  
+  // 4. Filtrar itens de consumo de água para esta unidade
+  let waterConsumptionItems = [];
   if (billingData.includeWaterConsumption && billingData.waterConsumptionItems) {
     waterConsumptionItems = billingData.waterConsumptionItems.filter((item: any) => 
-      item.unit && unitInfo.id &&
-      item.unit.toString() === unitInfo.id.toString()
+      item.unit && String(item.unit) === String(unitInfo.id)
     );
   }
   
-  // Combine all items for this specific unit
+  console.log("Water consumption items for this unit:", waterConsumptionItems);
+  
+  // 5. Combinar todos os itens relevantes para esta unidade
   const allUnitItems = [
-    ...filteredChargeItems,
+    ...generalChargeItems,
+    ...unitSpecificChargeItems,
     ...gasConsumptionItems,
     ...waterConsumptionItems
   ];
   
-  // Calculate the total amount
+  console.log("All items for this unit:", allUnitItems);
+  
+  // 6. Calcular o subtotal
   const subtotal = allUnitItems.reduce(
     (sum: number, item: any) => sum + parseFloat(item.value || 0), 
     0
   );
   
-  // Calculate discount if applicable
+  // 7. Calcular desconto se aplicável
   let discountAmount = 0;
   let discountObject = undefined;
   
@@ -276,9 +290,10 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
       : discountObject.value;
   }
   
-  // Calculate final amount
+  // 8. Calcular valor final
   const totalAmount = subtotal - discountAmount;
   
+  // 9. Preparar e retornar objeto da fatura
   return {
     condoName: "Meu Condomínio",
     condoAddress: "RUA ALEGRE, 123 - CIDADE BRASILEIRA",

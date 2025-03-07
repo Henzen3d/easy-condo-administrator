@@ -59,14 +59,18 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
     }
   };
 
-  // Generate invoice and store in Supabase
+  // Generate invoice (just downloads directly for now)
   const handleGenerateInvoice = async () => {
     try {
       setIsGenerating(true);
       
-      // Instead of trying to save to storage first (which is failing),
-      // we'll directly download the invoice
+      // Prepare invoice data with correct filtering for this unit
       const invoiceData = prepareInvoiceData(billingData, unit);
+      
+      console.log("Generating invoice for unit:", unit.id, unit.block, unit.number);
+      console.log("Invoice data:", invoiceData);
+      
+      // Generate and download the invoice directly
       await generateAndDownloadInvoice(invoiceData);
       
       toast({

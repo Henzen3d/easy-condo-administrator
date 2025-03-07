@@ -97,7 +97,10 @@ const BillingGeneratorPDF = ({ billingData }: BillingGeneratorPDFProps) => {
       
       // Generate invoices for each unit and add to zip
       for (const unit of relevantUnits) {
+        console.log(`Gerando fatura para unidade ${unit.block}-${unit.number}`);
         const invoiceData = prepareInvoiceData(billingData, unit);
+        console.log("Invoice data prepared:", invoiceData);
+        
         const pdfBlob = await generateInvoicePDF(invoiceData);
         
         // Generate filename based on unit and date
