@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
@@ -81,7 +80,7 @@ serve(async (req) => {
 
     // Check if PIX key is available, if not, use default phone number
     if (!invoiceData.pixKey) {
-      invoiceData.pixKey = "47988131910"; // Default phone number PIX key
+      invoiceData.pixKey = "00446547905"; // CPF para testes
     }
 
     // Ensure there is a transaction ID for the PIX code
