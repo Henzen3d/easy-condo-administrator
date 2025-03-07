@@ -22,6 +22,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { MeterReading, UtilityRate } from "@/types/consumption";
 import { CheckCircle2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 
 interface Unit {
   id: number;
@@ -55,10 +57,55 @@ export default function BillingGeneratorConsumption({
   const [waterRate, setWaterRate] = useState<UtilityRate | null>(null);
   const [gasConsumptionData, setGasConsumptionData] = useState<ConsumptionData[]>([]);
   const [waterConsumptionData, setWaterConsumptionData] = useState<ConsumptionData[]>([]);
+  const [editingReading, setEditingReading] = useState<{
+    unitId: number;
+    utilityType: 'gas' | 'water';
+    value: string;
+  } | null>(null);
   const [period, setPeriod] = useState({
     start_date: billingData.statementPeriod?.startDate || "",
     end_date: billingData.statementPeriod?.endDate || ""
   });
+
+  useEffect(() => {
+    if (billingData.reference?.month !== undefined && billingData.reference?.year !== undefined) {
+      const year = billingData.reference.year;
+      const month = billingData.reference.month;
+      
+      // Primeiro dia do mês
+      const firstDay = new Date(year, month, 1);
+      // Último dia do mês (dia 0 do próximo mês é o último dia do mês atual)
+      const lastDay = new Date(year, month + 1, 0);
+      
+      // Formatar as datas como strings YYYY-MM-DD
+      const formatDate = (date: Date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+      
+      // Só atualiza se as datas não tiverem sido definidas manualmente
+      if (!period.start_date || !period.end_date || 
+          (billingData.periodAutoSet && !billingData.periodManuallyEdited)) {
+        const newPeriod = {
+          start_date: formatDate(firstDay),
+          end_date: formatDate(lastDay)
+        };
+        
+        setPeriod(newPeriod);
+        
+        // Atualiza o billingData
+        updateBillingData({
+          statementPeriod: {
+            startDate: newPeriod.start_date,
+            endDate: newPeriod.end_date
+          },
+          periodAutoSet: true
+        });
+      }
+    }
+  }, [billingData.reference?.month, billingData.reference?.year]);
 
   useEffect(() => {
     loadUnits();
@@ -371,6 +418,74 @@ export default function BillingGeneratorConsumption({
 
   const handlePeriodChange = (field: 'start_date' | 'end_date', value: string) => {
     setPeriod(prev => ({ ...prev, [field]: value }));
+    
+    // Marca que o período foi editado manualmente
+    updateBillingData({
+      periodManuallyEdited: true
+    });
+  };
+
+  // Função para iniciar a edição de uma leitura anterior
+  const startEditingReading = (unitId: number, utilityType: 'gas' | 'water') => {
+    setEditingReading({
+      unitId,
+      utilityType,
+      value: ""
+    });
+  };
+
+  // Função para salvar uma leitura anterior
+  const saveInitialReading = async () => {
+    if (!editingReading || !editingReading.value || parseFloat(editingReading.value) <= 0) {
+      toast({
+        title: "Valor inválido",
+        description: "Por favor, insira um valor válido para a leitura.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Salvar a leitura no banco de dados
+      const readingDate = period.start_date;
+      const { error } = await supabase
+        .from('meter_readings')
+        .insert([{
+          unit_id: editingReading.unitId,
+          utility_type: editingReading.utilityType,
+          reading_value: parseFloat(editingReading.value),
+          reading_date: readingDate
+        }]);
+
+      if (error) throw error;
+
+      toast({
+        title: "Leitura salva com sucesso",
+        description: "A leitura inicial foi registrada e será usada para cálculos futuros."
+      });
+
+      // Recalcular o consumo
+      calculateConsumption();
+      
+      // Limpar o estado de edição
+      setEditingReading(null);
+    } catch (error) {
+      console.error("Erro ao salvar leitura inicial:", error);
+      toast({
+        title: "Erro ao salvar leitura",
+        description: "Não foi possível salvar a leitura inicial.",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Função para cancelar a edição
+  const cancelEditingReading = () => {
+    setEditingReading(null);
   };
 
   return (
@@ -388,6 +503,9 @@ export default function BillingGeneratorConsumption({
               value={period.start_date}
               onChange={(e) => handlePeriodChange('start_date', e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              Padrão: Primeiro dia do mês de referência
+            </p>
           </div>
           
           <div className="space-y-2">
@@ -399,6 +517,9 @@ export default function BillingGeneratorConsumption({
               value={period.end_date}
               onChange={(e) => handlePeriodChange('end_date', e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              Padrão: Último dia do mês de referência
+            </p>
           </div>
         </div>
         
@@ -410,192 +531,264 @@ export default function BillingGeneratorConsumption({
         </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'gas' | 'water')}>
-        <TabsList className="grid grid-cols-2 w-full">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'gas' | 'water')}>
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="gas">Consumo de Gás</TabsTrigger>
           <TabsTrigger value="water">Consumo de Água</TabsTrigger>
         </TabsList>
         
         <TabsContent value="gas" className="space-y-4">
-          <div className="flex items-center space-x-2 pt-2">
-            <input
-              type="checkbox"
-              id="include-gas"
-              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="include-gas-consumption"
               checked={billingData.includeGasConsumption}
-              onChange={(e) => handleIncludeGasConsumption(e.target.checked)}
+              onCheckedChange={(checked) => handleIncludeGasConsumption(!!checked)}
             />
-            <Label htmlFor="include-gas">
+            <Label htmlFor="include-gas-consumption">
               Incluir consumo de gás no faturamento
             </Label>
           </div>
           
-          {!gasRate ? (
-            <Card>
-              <CardContent className="p-6">
-                <div className="text-center text-amber-600">
-                  <p>Taxa de consumo de gás não configurada. Configure a taxa antes de prosseguir.</p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
+          <Card>
+            <CardContent className="pt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Unidade</TableHead>
+                    <TableHead>Leitura Anterior</TableHead>
+                    <TableHead>Leitura Atual</TableHead>
+                    <TableHead>Consumo (m³)</TableHead>
+                    <TableHead>Taxa (R$/m³)</TableHead>
+                    <TableHead>Total (R$)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {gasConsumptionData.length === 0 ? (
                     <TableRow>
-                      <TableHead>Unidade</TableHead>
-                      <TableHead>Leitura Anterior</TableHead>
-                      <TableHead>Leitura Atual</TableHead>
-                      <TableHead>Consumo (m³)</TableHead>
-                      <TableHead>Taxa (R$/m³)</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
+                      <TableCell colSpan={6} className="text-center py-4">
+                        {loading ? "Calculando consumo..." : "Nenhum dado de consumo disponível"}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {gasConsumptionData.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-4">
-                          {loading ? "Calculando consumo..." : "Nenhum dado de consumo disponível"}
+                  ) : (
+                    gasConsumptionData.map((item) => (
+                      <TableRow key={`gas-${item.unit_id}`}>
+                        <TableCell>{item.unit_name}</TableCell>
+                        <TableCell>
+                          {editingReading && 
+                           editingReading.unitId === item.unit_id && 
+                           editingReading.utilityType === 'gas' ? (
+                            <div className="flex flex-col gap-2">
+                              <Input
+                                type="number"
+                                step="0.001"
+                                placeholder="Valor da leitura"
+                                value={editingReading.value}
+                                onChange={(e) => setEditingReading({
+                                  ...editingReading,
+                                  value: e.target.value
+                                })}
+                                className="w-32"
+                              />
+                              <div className="flex gap-1">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  onClick={saveInitialReading}
+                                  disabled={loading}
+                                >
+                                  Salvar
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  onClick={cancelEditingReading}
+                                  disabled={loading}
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : item.previous_reading ? (
+                            <div className="text-sm">
+                              <div>{item.previous_reading.reading_value} m³</div>
+                              <div className="text-xs text-muted-foreground">
+                                {formatDate(item.previous_reading.reading_date)}
+                                {item.current_reading && item.previous_reading.reading_date === item.current_reading.reading_date ? (
+                                  <span className="ml-1 text-blue-600 font-medium">(Leitura Inicial)</span>
+                                ) : ""}
+                              </div>
+                            </div>
+                          ) : (
+                            <button 
+                              className="text-amber-600 hover:text-amber-800 hover:underline focus:outline-none"
+                              onClick={() => startEditingReading(item.unit_id, 'gas')}
+                            >
+                              Sem leitura anterior
+                              <div className="text-xs">Clique para adicionar</div>
+                            </button>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {item.current_reading ? (
+                            <div className="text-sm">
+                              <div>{item.current_reading.reading_value} m³</div>
+                              <div className="text-xs text-muted-foreground">
+                                {formatDate(item.current_reading.reading_date)}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-amber-600">Sem leitura</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {item.consumption !== null ? (
+                            <span>{item.consumption.toFixed(3)}</span>
+                          ) : (
+                            <span className="text-amber-600">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{item.rate.toFixed(2)}</TableCell>
+                        <TableCell>
+                          {item.total !== null ? (
+                            <span className="font-medium">{formatCurrency(item.total)}</span>
+                          ) : (
+                            <span className="text-amber-600">-</span>
+                          )}
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      gasConsumptionData.map((item) => (
-                        <TableRow key={`gas-${item.unit_id}`}>
-                          <TableCell>{item.unit_name}</TableCell>
-                          <TableCell>
-                            {item.previous_reading ? (
-                              <div className="text-sm">
-                                <div>{item.previous_reading.reading_value} m³</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {formatDate(item.previous_reading.reading_date)}
-                                  {item.current_reading && item.previous_reading.reading_date === item.current_reading.reading_date ? (
-                                    <span className="ml-1 text-blue-600 font-medium">(Leitura Inicial)</span>
-                                  ) : ""}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-amber-600">Sem leitura anterior</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {item.current_reading ? (
-                              <div className="text-sm">
-                                <div>{item.current_reading.reading_value} m³</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {formatDate(item.current_reading.reading_date)}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-amber-600">Sem leitura</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {item.consumption !== null ? `${item.consumption.toFixed(3)} m³` : "-"}
-                          </TableCell>
-                          <TableCell>{formatCurrency(item.rate)}</TableCell>
-                          <TableCell className="text-right font-medium">
-                            {item.total !== null ? formatCurrency(item.total) : "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
         
         <TabsContent value="water" className="space-y-4">
-          <div className="flex items-center space-x-2 pt-2">
-            <input
-              type="checkbox"
-              id="include-water"
-              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="include-water-consumption"
               checked={billingData.includeWaterConsumption}
-              onChange={(e) => handleIncludeWaterConsumption(e.target.checked)}
+              onCheckedChange={(checked) => handleIncludeWaterConsumption(!!checked)}
             />
-            <Label htmlFor="include-water">
+            <Label htmlFor="include-water-consumption">
               Incluir consumo de água no faturamento
             </Label>
           </div>
           
-          {!waterRate ? (
-            <Card>
-              <CardContent className="p-6">
-                <div className="text-center text-amber-600">
-                  <p>Taxa de consumo de água não configurada. Configure a taxa antes de prosseguir.</p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
+          <Card>
+            <CardContent className="pt-6">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Unidade</TableHead>
+                    <TableHead>Leitura Anterior</TableHead>
+                    <TableHead>Leitura Atual</TableHead>
+                    <TableHead>Consumo (m³)</TableHead>
+                    <TableHead>Taxa (R$/m³)</TableHead>
+                    <TableHead>Total (R$)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {waterConsumptionData.length === 0 ? (
                     <TableRow>
-                      <TableHead>Unidade</TableHead>
-                      <TableHead>Leitura Anterior</TableHead>
-                      <TableHead>Leitura Atual</TableHead>
-                      <TableHead>Consumo (m³)</TableHead>
-                      <TableHead>Taxa (R$/m³)</TableHead>
-                      <TableHead className="text-right">Total</TableHead>
+                      <TableCell colSpan={6} className="text-center py-4">
+                        {loading ? "Calculando consumo..." : "Nenhum dado de consumo disponível"}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {waterConsumptionData.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-4">
-                          {loading ? "Calculando consumo..." : "Nenhum dado de consumo disponível"}
+                  ) : (
+                    waterConsumptionData.map((item) => (
+                      <TableRow key={`water-${item.unit_id}`}>
+                        <TableCell>{item.unit_name}</TableCell>
+                        <TableCell>
+                          {editingReading && 
+                           editingReading.unitId === item.unit_id && 
+                           editingReading.utilityType === 'water' ? (
+                            <div className="flex flex-col gap-2">
+                              <Input
+                                type="number"
+                                step="0.001"
+                                placeholder="Valor da leitura"
+                                value={editingReading.value}
+                                onChange={(e) => setEditingReading({
+                                  ...editingReading,
+                                  value: e.target.value
+                                })}
+                                className="w-32"
+                              />
+                              <div className="flex gap-1">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  onClick={saveInitialReading}
+                                  disabled={loading}
+                                >
+                                  Salvar
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  onClick={cancelEditingReading}
+                                  disabled={loading}
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : item.previous_reading ? (
+                            <div className="text-sm">
+                              <div>{item.previous_reading.reading_value} m³</div>
+                              <div className="text-xs text-muted-foreground">
+                                {formatDate(item.previous_reading.reading_date)}
+                                {item.current_reading && item.previous_reading.reading_date === item.current_reading.reading_date ? (
+                                  <span className="ml-1 text-blue-600 font-medium">(Leitura Inicial)</span>
+                                ) : ""}
+                              </div>
+                            </div>
+                          ) : (
+                            <button 
+                              className="text-amber-600 hover:text-amber-800 hover:underline focus:outline-none"
+                              onClick={() => startEditingReading(item.unit_id, 'water')}
+                            >
+                              Sem leitura anterior
+                              <div className="text-xs">Clique para adicionar</div>
+                            </button>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {item.current_reading ? (
+                            <div className="text-sm">
+                              <div>{item.current_reading.reading_value} m³</div>
+                              <div className="text-xs text-muted-foreground">
+                                {formatDate(item.current_reading.reading_date)}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-amber-600">Sem leitura</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {item.consumption !== null ? (
+                            <span>{item.consumption.toFixed(3)}</span>
+                          ) : (
+                            <span className="text-amber-600">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{item.rate.toFixed(2)}</TableCell>
+                        <TableCell>
+                          {item.total !== null ? (
+                            <span className="font-medium">{formatCurrency(item.total)}</span>
+                          ) : (
+                            <span className="text-amber-600">-</span>
+                          )}
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      waterConsumptionData.map((item) => (
-                        <TableRow key={`water-${item.unit_id}`}>
-                          <TableCell>{item.unit_name}</TableCell>
-                          <TableCell>
-                            {item.previous_reading ? (
-                              <div className="text-sm">
-                                <div>{item.previous_reading.reading_value} m³</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {formatDate(item.previous_reading.reading_date)}
-                                  {item.current_reading && item.previous_reading.reading_date === item.current_reading.reading_date ? (
-                                    <span className="ml-1 text-blue-600 font-medium">(Leitura Inicial)</span>
-                                  ) : ""}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-amber-600">Sem leitura anterior</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {item.current_reading ? (
-                              <div className="text-sm">
-                                <div>{item.current_reading.reading_value} m³</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {formatDate(item.current_reading.reading_date)}
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-amber-600">Sem leitura</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {item.consumption !== null ? `${item.consumption.toFixed(3)} m³` : "-"}
-                          </TableCell>
-                          <TableCell>{formatCurrency(item.rate)}</TableCell>
-                          <TableCell className="text-right font-medium">
-                            {item.total !== null ? formatCurrency(item.total) : "-"}
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

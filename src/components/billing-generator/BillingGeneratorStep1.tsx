@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Calendar } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -15,7 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { format } from "date-fns";
+import { format, addDays, isWeekend, isValid } from "date-fns";
 import { pt } from 'date-fns/locale';
 
 interface BillingGeneratorStep1Props {
@@ -30,11 +29,102 @@ const MONTHS = [
 
 const YEARS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
 
+// Função para calcular o 10º dia útil do mês
+const calculateTenthBusinessDay = (year: number, month: number) => {
+  // Cria uma data para o primeiro dia do mês
+  const date = new Date(year, month, 1);
+  let businessDays = 0;
+  
+  // Conta até encontrar o 10º dia útil
+  while (businessDays < 10) {
+    // Avança um dia
+    date.setDate(date.getDate() + 1);
+    
+    // Se não for fim de semana (0 = domingo, 6 = sábado)
+    const dayOfWeek = date.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      businessDays++;
+    }
+  }
+  
+  return date;
+};
+
+// Função para gerar o nome do faturamento padrão
+const generateDefaultBillingName = (month: number, year: number) => {
+  return `Taxa de Condomínio - ${MONTHS[month]} de ${year}`;
+};
+
 const BillingGeneratorStep1 = ({ 
   billingData, 
   updateBillingData 
 }: BillingGeneratorStep1Props) => {
   const [discountEnabled, setDiscountEnabled] = useState(billingData.earlyPaymentDiscount?.enabled || false);
+  
+  // Inicializa valores padrão quando o componente é montado
+  useEffect(() => {
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth();
+    const currentYear = currentDate.getFullYear();
+    
+    // Se não houver mês/ano de referência definidos, use o mês/ano atual
+    if (!billingData.reference || !billingData.reference.month || !billingData.reference.year) {
+      updateBillingData({
+        reference: {
+          month: currentMonth,
+          year: currentYear
+        }
+      });
+    }
+    
+    // Se não houver data de vencimento definida, calcule o 10º dia útil
+    if (!billingData.dueDate) {
+      const month = billingData.reference?.month !== undefined ? billingData.reference.month : currentMonth;
+      const year = billingData.reference?.year !== undefined ? billingData.reference.year : currentYear;
+      const tenthBusinessDay = calculateTenthBusinessDay(year, month);
+      
+      updateBillingData({ dueDate: tenthBusinessDay });
+    }
+    
+    // Se não houver nome de faturamento definido, gere um padrão
+    if (!billingData.name) {
+      const month = billingData.reference?.month !== undefined ? billingData.reference.month : currentMonth;
+      const year = billingData.reference?.year !== undefined ? billingData.reference.year : currentYear;
+      const defaultName = generateDefaultBillingName(month, year);
+      
+      updateBillingData({ name: defaultName });
+    }
+  }, [billingData.reference?.month, billingData.reference?.year]);
+  
+  // Atualiza o nome do faturamento quando o mês/ano de referência mudar
+  useEffect(() => {
+    if (billingData.reference?.month !== undefined && billingData.reference?.year !== undefined) {
+      // Só atualiza automaticamente se o nome atual for o padrão ou estiver vazio
+      const currentDefaultName = generateDefaultBillingName(billingData.reference.month, billingData.reference.year);
+      
+      // Verifica se o nome atual é o padrão do mês anterior ou está vazio
+      const shouldUpdateName = !billingData.name || 
+        billingData.name.startsWith('Taxa de Condomínio - ');
+      
+      if (shouldUpdateName) {
+        updateBillingData({ name: currentDefaultName });
+      }
+      
+      // Recalcula a data de vencimento (10º dia útil) quando o mês/ano mudar
+      const tenthBusinessDay = calculateTenthBusinessDay(billingData.reference.year, billingData.reference.month);
+      
+      // Só atualiza a data de vencimento se não tiver sido manualmente alterada
+      const shouldUpdateDueDate = !billingData.dueDate || 
+        (billingData.dueDate && billingData.dueDateAutoSet);
+      
+      if (shouldUpdateDueDate) {
+        updateBillingData({ 
+          dueDate: tenthBusinessDay,
+          dueDateAutoSet: true
+        });
+      }
+    }
+  }, [billingData.reference?.month, billingData.reference?.year]);
   
   const handleDiscountToggle = (checked: boolean) => {
     setDiscountEnabled(checked);
@@ -49,7 +139,10 @@ const BillingGeneratorStep1 = ({
   const handleDateChange = (field: string, date: Date | undefined) => {
     if (date) {
       if (field === 'dueDate') {
-        updateBillingData({ dueDate: date });
+        updateBillingData({ 
+          dueDate: date,
+          dueDateAutoSet: false // Marca que a data foi manualmente alterada
+        });
       } else if (field === 'discountDueDate') {
         updateBillingData({
           earlyPaymentDiscount: {
@@ -121,7 +214,7 @@ const BillingGeneratorStep1 = ({
         <Label htmlFor="billing-name">Nome do Faturamento</Label>
         <Input
           id="billing-name"
-          placeholder="Ex: Taxa de Condomínio"
+          placeholder="Ex: Taxa de Condomínio - Janeiro de 2024"
           value={billingData.name}
           onChange={(e) => updateBillingData({ name: e.target.value })}
         />
@@ -153,6 +246,9 @@ const BillingGeneratorStep1 = ({
             />
           </PopoverContent>
         </Popover>
+        <p className="text-xs text-muted-foreground mt-1">
+          Data padrão: 10º dia útil do mês de referência
+        </p>
       </div>
 
       <div className="space-y-4">

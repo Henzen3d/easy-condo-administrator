@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { 
   Dialog,
@@ -42,7 +41,7 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
       
       // Add a default PIX key if one isn't provided
       if (!invoiceData.pixKey) {
-        invoiceData.pixKey = "47988131910"; // Default phone number PIX key
+        invoiceData.pixKey = "00446547905"; // CPF para testes
       }
       
       console.log("Generated invoice data for preview:", invoiceData);
@@ -83,7 +82,7 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
       
       // Add a default PIX key if one isn't provided
       if (!invoiceData.pixKey) {
-        invoiceData.pixKey = "47988131910"; // Default phone number PIX key
+        invoiceData.pixKey = "00446547905"; // CPF para testes
       }
       
       console.log("Generating invoice for unit:", unit.id, unit.block, unit.number);
