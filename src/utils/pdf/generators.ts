@@ -1,4 +1,3 @@
-
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
@@ -349,8 +348,8 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
     discount: discountObject,
     total: totalAmount,
     
-    // Use phone number PIX key as default
-    pixKey: "47988131910",
+    // Use CPF as PIX key (for testing)
+    pixKey: "00446547905", // CPF para testes, conforme solicitado
     transactionId: `${unitInfo.block || "A"}${unitInfo.number || "101"}${billingData.reference?.month || new Date().getMonth()}${billingData.reference?.year || new Date().getFullYear()}`,
     beneficiaryName: "CONDOMINIO EXEMPLO"
   };
@@ -398,7 +397,7 @@ export const generateMockInvoiceData = (billingData: any): InvoiceData => {
       : undefined,
     total: billingData.chargeItems?.reduce((sum: number, item: any) => sum + parseFloat(item.value || 0), 0) || 0,
     
-    pixKey: "47988131910",
+    pixKey: "00446547905",
     transactionId: `${unitDisplay.block}${unitDisplay.number}${billingData.reference?.month || new Date().getMonth()}${billingData.reference?.year || new Date().getFullYear()}`,
     beneficiaryName: "CONDOMINIO EXEMPLO"
   };
