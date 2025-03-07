@@ -64,29 +64,15 @@ const BillingGeneratorInvoice = ({ billingData, unit }: BillingGeneratorInvoiceP
     try {
       setIsGenerating(true);
       
-      // Prepare invoice data
+      // Instead of trying to save to storage first (which is failing),
+      // we'll directly download the invoice
       const invoiceData = prepareInvoiceData(billingData, unit);
+      await generateAndDownloadInvoice(invoiceData);
       
-      // Generate the invoice PDF
-      const pdfBlob = await generateInvoicePDF(invoiceData);
-      
-      // Generate a unique filename based on unit and date
-      const fileName = `faturas/${unit.block}-${unit.number}_${format(new Date(), 'yyyy-MM-dd_HH-mm-ss')}.pdf`;
-      
-      // Save the invoice to Supabase Storage
-      const publicUrl = await saveInvoiceToStorage(pdfBlob, fileName);
-      
-      if (publicUrl) {
-        setInvoiceUrl(publicUrl);
-        setIsDialogOpen(true);
-        
-        toast({
-          title: "Fatura gerada com sucesso",
-          description: "A fatura foi gerada e está disponível para download.",
-        });
-      } else {
-        throw new Error("Não foi possível salvar a fatura.");
-      }
+      toast({
+        title: "Fatura gerada com sucesso",
+        description: "O download da fatura foi iniciado.",
+      });
     } catch (error) {
       console.error("Erro ao gerar fatura:", error);
       toast({

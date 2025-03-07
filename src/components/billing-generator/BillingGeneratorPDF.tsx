@@ -27,10 +27,14 @@ import { Loader2, FileText, Download, BuildingIcon } from "lucide-react";
 import { fetchUnits, Unit } from "@/utils/consumptionUtils";
 import { 
   generateAndDownloadInvoice, 
-  prepareInvoiceData 
+  prepareInvoiceData,
+  generateInvoicePDF
 } from "@/utils/pdf";
 import BillingGeneratorInvoice from "./BillingGeneratorInvoice";
 import BillingGeneratorInvoices from "./BillingGeneratorInvoices";
+import JSZip from "jszip";
+import { format } from "date-fns";
+import { getMonthName } from "@/utils/pdf";
 
 interface BillingGeneratorPDFProps {
   billingData: any;
@@ -40,6 +44,7 @@ const BillingGeneratorPDF = ({ billingData }: BillingGeneratorPDFProps) => {
   const { toast } = useToast();
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isGeneratingZip, setIsGeneratingZip] = useState(false);
   const [activeTab, setActiveTab] = useState("generate");
 
   // Fetch all units on component mount
@@ -78,26 +83,50 @@ const BillingGeneratorPDF = ({ billingData }: BillingGeneratorPDFProps) => {
 
   const relevantUnits = getRelevantUnits();
 
-  // Download invoice for all units
+  // Download all invoices as a ZIP file
   const handleDownloadAllInvoices = async () => {
     try {
+      setIsGeneratingZip(true);
       toast({
         title: "Gerando faturas",
-        description: "Iniciando o download de todas as faturas. Isso pode levar alguns instantes.",
+        description: "Iniciando a geração de todas as faturas em um arquivo zip.",
       });
 
-      // Generate invoices sequentially to avoid overwhelming the browser
+      // Create a new JSZip instance
+      const zip = new JSZip();
+      
+      // Generate invoices for each unit and add to zip
       for (const unit of relevantUnits) {
         const invoiceData = prepareInvoiceData(billingData, unit);
-        await generateAndDownloadInvoice(invoiceData);
+        const pdfBlob = await generateInvoicePDF(invoiceData);
         
-        // Add a small delay between downloads
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Generate filename based on unit and date
+        const fileName = `fatura_${unit.block}-${unit.number}_${getMonthName(invoiceData.referenceMonth)}_${invoiceData.referenceYear}.pdf`;
+        
+        // Add the PDF to the zip file
+        zip.file(fileName, pdfBlob);
       }
+      
+      // Generate the zip file
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      
+      // Create a download link for the zip file
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `faturas_${format(new Date(), 'yyyy-MM-dd')}.zip`;
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
 
       toast({
         title: "Faturas geradas",
-        description: "Todas as faturas foram geradas com sucesso.",
+        description: "Todas as faturas foram geradas com sucesso e compactadas em um arquivo ZIP.",
       });
     } catch (error) {
       console.error('Error generating all invoices:', error);
@@ -106,6 +135,8 @@ const BillingGeneratorPDF = ({ billingData }: BillingGeneratorPDFProps) => {
         description: "Ocorreu um erro ao gerar as faturas. Tente novamente.",
         variant: "destructive",
       });
+    } finally {
+      setIsGeneratingZip(false);
     }
   };
 
@@ -160,9 +191,21 @@ const BillingGeneratorPDF = ({ billingData }: BillingGeneratorPDFProps) => {
                   
                   {relevantUnits.length > 1 && (
                     <div className="flex justify-end">
-                      <Button onClick={handleDownloadAllInvoices}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Gerar Todas as Faturas
+                      <Button 
+                        onClick={handleDownloadAllInvoices} 
+                        disabled={isGeneratingZip}
+                      >
+                        {isGeneratingZip ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Gerando ZIP...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="mr-2 h-4 w-4" />
+                            Gerar Todas as Faturas (ZIP)
+                          </>
+                        )}
                       </Button>
                     </div>
                   )}
