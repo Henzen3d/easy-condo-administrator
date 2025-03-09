@@ -230,6 +230,31 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
            item.unit === "" || 
            item.unit === null);
   }) || [];
+
+  // Add condominium fees and reserve funds
+  if (billingData.condominiumFees) {
+    const condoFee = {
+      category: 'Taxa de Condomínio',
+      description: billingData.condominiumFees.type === 'fixed' 
+        ? 'Taxa Fixa de Condomínio' 
+        : 'Taxa Rateada de Condomínio',
+      value: billingData.condominiumFees.value,
+      targetUnits: 'all'
+    };
+    globalCharges.push(condoFee);
+  }
+
+  if (billingData.reserveFund) {
+    const reserveFee = {
+      category: 'Fundo de Reserva',
+      description: billingData.reserveFund.type === 'fixed' 
+        ? 'Contribuição Fixa ao Fundo de Reserva' 
+        : 'Contribuição Rateada ao Fundo de Reserva',
+      value: billingData.reserveFund.value,
+      targetUnits: 'all'
+    };
+    globalCharges.push(reserveFee);
+  }
   
   console.log("Global charges:", globalCharges);
   
@@ -243,6 +268,35 @@ export const prepareInvoiceData = (billingData: any, unitInfo: any): InvoiceData
            item.unit !== null && 
            String(item.unit) === String(unitInfo.id));
   }) || [];
+
+  // Add any unit-specific condominium fees or reserve funds
+  if (billingData.unitSpecificFees) {
+    const unitFees = billingData.unitSpecificFees.filter((fee: any) => 
+      String(fee.unit) === String(unitInfo.id)
+    );
+    
+    unitFees.forEach((fee: any) => {
+      if (fee.type === 'condominium') {
+        unitSpecificCharges.push({
+          category: 'Taxa de Condomínio',
+          description: fee.calculationMethod === 'fixed' 
+            ? 'Taxa Fixa de Condomínio (Unidade)' 
+            : 'Taxa Rateada de Condomínio (Unidade)',
+          value: fee.value,
+          targetUnits: fee.unit
+        });
+      } else if (fee.type === 'reserve') {
+        unitSpecificCharges.push({
+          category: 'Fundo de Reserva',
+          description: fee.calculationMethod === 'fixed' 
+            ? 'Contribuição Fixa ao Fundo de Reserva (Unidade)' 
+            : 'Contribuição Rateada ao Fundo de Reserva (Unidade)',
+          value: fee.value,
+          targetUnits: fee.unit
+        });
+      }
+    });
+  }
   
   console.log("Unit specific charges:", unitSpecificCharges);
   

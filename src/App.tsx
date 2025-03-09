@@ -1,6 +1,5 @@
-
 import { useState, useEffect } from "react";
-import { Routes, Route, useLocation, BrowserRouter } from "react-router-dom";
+import { Routes, Route, useLocation, BrowserRouter, Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "@/pages/Dashboard";

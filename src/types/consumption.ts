@@ -8,6 +8,17 @@ export interface UtilityRate {
   updated_at?: string;
 }
 
+export interface FixedRate {
+  id: number;
+  rate_type: 'condo' | 'reserve';
+  billing_method: 'fixed' | 'prorated';
+  expense_type: 'ordinary' | 'extraordinary';
+  amount: number;
+  effective_date: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface MeterReading {
   id: number;
   unit_id: number;
