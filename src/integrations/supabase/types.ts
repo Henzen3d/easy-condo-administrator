@@ -9,6 +9,39 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      fixed_rates: {
+        Row: {
+          id: number
+          rate_type: string
+          billing_method: string
+          expense_type: string
+          amount: number
+          effective_date: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: number
+          rate_type: string
+          billing_method: string
+          expense_type: string
+          amount: number
+          effective_date: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: number
+          rate_type?: string
+          billing_method?: string
+          expense_type?: string
+          amount?: number
+          effective_date?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       bank_accounts: {
         Row: {
           account_number: string
@@ -22,6 +55,8 @@ export type Database = {
           initial_balance: number
           name: string
           updated_at: string | null
+          pix_key: string | null
+          pix_key_type: string | null
         }
         Insert: {
           account_number: string
@@ -35,6 +70,8 @@ export type Database = {
           initial_balance?: number
           name: string
           updated_at?: string | null
+          pix_key?: string | null
+          pix_key_type?: string | null
         }
         Update: {
           account_number?: string
@@ -48,8 +85,127 @@ export type Database = {
           initial_balance?: number
           name?: string
           updated_at?: string | null
+          pix_key?: string | null
+          pix_key_type?: string | null
         }
         Relationships: []
+      }
+      invoices: {
+        Row: {
+          id: number
+          invoice_number: string
+          reference_month: number
+          reference_year: number
+          unit: string
+          unit_id: number
+          resident: string
+          total_amount: number
+          due_date: string
+          status: string
+          payment_date: string | null
+          payment_method: string | null
+          payment_account_id: number | null
+          notes: string | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: number
+          invoice_number: string
+          reference_month: number
+          reference_year: number
+          unit: string
+          unit_id: number
+          resident: string
+          total_amount: number
+          due_date: string
+          status?: string
+          payment_date?: string | null
+          payment_method?: string | null
+          payment_account_id?: number | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: number
+          invoice_number?: string
+          reference_month?: number
+          reference_year?: number
+          unit?: string
+          unit_id?: number
+          resident?: string
+          total_amount?: number
+          due_date?: string
+          status?: string
+          payment_date?: string | null
+          payment_method?: string | null
+          payment_account_id?: number | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      invoice_items: {
+        Row: {
+          id: number
+          invoice_id: number
+          billing_id: string
+          description: string
+          amount: number
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: number
+          invoice_id: number
+          billing_id: string
+          description: string
+          amount: number
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: number
+          invoice_id?: number
+          billing_id?: string
+          description?: string
+          amount?: number
+          created_at?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_items_billing_id_fkey"
+            columns: ["billing_id"]
+            isOneToOne: false
+            referencedRelation: "billings"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       billings: {
         Row: {

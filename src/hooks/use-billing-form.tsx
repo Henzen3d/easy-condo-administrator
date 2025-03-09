@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 
 // Define billing data type
@@ -10,6 +9,12 @@ export interface BillingData {
   includeWaterConsumption: boolean;
   gasConsumptionItems: any[];
   waterConsumptionItems: any[];
+  gasConsumptionData: any[];
+  waterConsumptionData: any[];
+  consumptionPeriod: {
+    start_date: string;
+    end_date: string;
+  };
   earlyPaymentDiscount: {
     enabled: boolean;
     dueDate: string | Date;
@@ -24,6 +29,11 @@ export interface BillingData {
     endDate: string | Date;
   };
   additionalMessage: string;
+  notes: string;
+  existingBillings: any[];
+  selectedBillings: string[];
+  periodManuallyEdited: boolean;
+  periodAutoSet: boolean;
 }
 
 export const useBillingForm = () => {
@@ -36,6 +46,12 @@ export const useBillingForm = () => {
     includeWaterConsumption: false,
     gasConsumptionItems: [],
     waterConsumptionItems: [],
+    gasConsumptionData: [],
+    waterConsumptionData: [],
+    consumptionPeriod: {
+      start_date: "",
+      end_date: ""
+    },
     earlyPaymentDiscount: {
       enabled: false,
       dueDate: "",
@@ -50,6 +66,11 @@ export const useBillingForm = () => {
       endDate: "",
     },
     additionalMessage: "",
+    notes: "",
+    existingBillings: [],
+    selectedBillings: [],
+    periodManuallyEdited: false,
+    periodAutoSet: false
   });
 
   // Function to update billing data

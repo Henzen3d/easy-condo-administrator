@@ -4,6 +4,9 @@ import {
   Card,
   CardContent,
   CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
 } from "@/components/ui/card";
 import {
   Dialog,
@@ -47,19 +50,35 @@ import {
   Eye,
   Pencil,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  QrCode,
+  Receipt,
+  Building
 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { Label } from "@/components/ui/label";
+import { 
+  getBillingById 
+} from "@/utils/consumptionUtils";
+import { 
+  generateBillingsSummaryPDF, 
+  generateBillingBoleto, 
+  generatePixQRCode 
+} from "@/lib/pdfService";
+import { 
+  fetchBillings, 
+  groupBillingsByUnit, 
+  updateBillingStatus, 
+  markBillingAsPrinted, 
+  markBillingAsSent,
+  Billing as BillingType
+} from "@/lib/billingService";
 import NewBillingForm from "@/components/billing/NewBillingForm";
 import EditBillingForm from "@/components/billing/EditBillingForm";
 import BillingFilters from "@/components/billing/BillingFilters";
-import { supabase } from "@/integrations/supabase/client";
-// Use type-only import to avoid naming conflicts
-import type { Billing } from "@/utils/consumptionUtils";
 import { 
-  updateBillingStatus, 
   updateBillingFlag, 
-  getBillingById 
 } from "@/utils/consumptionUtils";
 
 type BillingStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
@@ -103,7 +122,7 @@ const BillingStatusBadge = ({ status }: { status: BillingStatus }) => {
 };
 
 const Billing = () => {
-  const [isNewBillingOpen, setIsNewBillingOpen] = useState(false);
+  const [isNewBillingDialogOpen, setIsNewBillingDialogOpen] = useState(false);
   const [tabValue, setTabValue] = useState("all");
   const [billings, setBillings] = useState<BillingDisplay[]>([]);
   const [filteredBillings, setFilteredBillings] = useState<BillingDisplay[]>([]);
@@ -135,6 +154,7 @@ const Billing = () => {
     startDate: null,
     endDate: null
   });
+  const [isSummaryDialogOpen, setIsSummaryDialogOpen] = useState(false);
 
   // Memoize fetchBillings to prevent re-renders causing multiple fetches
   const fetchBillings = useCallback(async () => {
@@ -423,17 +443,300 @@ const Billing = () => {
     return new Intl.DateTimeFormat('pt-BR').format(date);
   };
 
+  // Componente para gerar resumo de cobranças por unidade
+  const BillingsSummary = ({ billings, onClose }: { billings: BillingType[], onClose: () => void }) => {
+    const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
+    const groupedBillings = groupBillingsByUnit(billings);
+    
+    const selectedUnitData = selectedUnit 
+      ? groupedBillings.find(item => item.unit === selectedUnit)
+      : null;
+      
+    const formatCurrency = (value: number) => {
+      return new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }).format(value);
+    };
+    
+    const formatDate = (dateString: string) => {
+      const date = new Date(dateString);
+      return new Intl.DateTimeFormat('pt-BR').format(date);
+    };
+
+    // Função para gerar PDF de resumo
+    const handleGenerateSummaryPDF = () => {
+      if (!selectedUnitData) return;
+      
+      try {
+        const pdfUrl = generateBillingsSummaryPDF(
+          selectedUnitData.unit,
+          selectedUnitData.resident,
+          selectedUnitData.items,
+          selectedUnitData.totalAmount
+        );
+        
+        // Abrir o PDF em uma nova aba
+        window.open(pdfUrl, '_blank');
+        
+        // Marcar as cobranças como impressas
+        selectedUnitData.items.forEach(async (item) => {
+          await markBillingAsPrinted(item.id);
+        });
+        
+        toast.success('PDF de resumo gerado com sucesso');
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+        toast.error('Erro ao gerar PDF de resumo');
+      }
+    };
+
+    // Função para gerar boleto
+    const handleGenerateBoleto = () => {
+      if (!selectedUnitData) return;
+      
+      try {
+        // Gerar um boleto único para o total
+        const combinedBilling: BillingType = {
+          id: `COMB-${selectedUnitData.unit}`,
+          unit: selectedUnitData.unit,
+          resident: selectedUnitData.resident,
+          description: `Cobranças Consolidadas - Unidade ${selectedUnitData.unit}`,
+          amount: selectedUnitData.totalAmount,
+          dueDate: new Date().toISOString().split('T')[0], // Data atual
+          status: 'pending',
+          isPrinted: false,
+          isSent: false
+        };
+        
+        const pdfUrl = generateBillingBoleto(combinedBilling);
+        
+        // Abrir o PDF em uma nova aba
+        window.open(pdfUrl, '_blank');
+        
+        // Marcar as cobranças como impressas
+        selectedUnitData.items.forEach(async (item) => {
+          await markBillingAsPrinted(item.id);
+        });
+        
+        toast.success('Boleto gerado com sucesso');
+      } catch (error) {
+        console.error('Error generating boleto:', error);
+        toast.error('Erro ao gerar boleto');
+      }
+    };
+
+    // Função para gerar QR Code PIX
+    const handleGeneratePix = () => {
+      if (!selectedUnitData) return;
+      
+      try {
+        // Gerar um PIX único para o total
+        const combinedBilling: BillingType = {
+          id: `COMB-${selectedUnitData.unit}`,
+          unit: selectedUnitData.unit,
+          resident: selectedUnitData.resident,
+          description: `Cobranças Consolidadas - Unidade ${selectedUnitData.unit}`,
+          amount: selectedUnitData.totalAmount,
+          dueDate: new Date().toISOString().split('T')[0], // Data atual
+          status: 'pending',
+          isPrinted: false,
+          isSent: false
+        };
+        
+        const pdfUrl = generatePixQRCode(combinedBilling);
+        
+        // Abrir o PDF em uma nova aba
+        window.open(pdfUrl, '_blank');
+        
+        // Marcar as cobranças como enviadas
+        selectedUnitData.items.forEach(async (item) => {
+          await markBillingAsSent(item.id);
+        });
+        
+        toast.success('QR Code PIX gerado com sucesso');
+      } catch (error) {
+        console.error('Error generating PIX:', error);
+        toast.error('Erro ao gerar QR Code PIX');
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="unit-select">Selecione a Unidade</Label>
+          <select 
+            id="unit-select" 
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            value={selectedUnit || ''}
+            onChange={(e) => setSelectedUnit(e.target.value)}
+          >
+            <option value="">Selecione uma unidade</option>
+            {groupedBillings.map((group) => (
+              <option key={group.unit} value={group.unit}>
+                {group.unit} - {group.resident} ({group.items.length} cobranças)
+              </option>
+            ))}
+          </select>
+        </div>
+        
+        {selectedUnitData && (
+          <Card className="animate-fade-in">
+            <CardHeader className="pb-3">
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Resumo de Cobranças - Unidade {selectedUnitData.unit}</CardTitle>
+                  <CardDescription>Morador: {selectedUnitData.resident}</CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex items-center gap-1"
+                    onClick={handleGeneratePix}
+                  >
+                    <QrCode size={14} />
+                    <span>Gerar PIX</span>
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex items-center gap-1"
+                    onClick={handleGenerateBoleto}
+                  >
+                    <Receipt size={14} />
+                    <span>Gerar Boleto</span>
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex items-center gap-1"
+                    onClick={handleGenerateSummaryPDF}
+                  >
+                    <Printer size={14} />
+                    <span>Imprimir</span>
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-muted rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Total a Pagar</p>
+                    <p className="text-2xl font-bold text-primary">
+                      {formatCurrency(selectedUnitData.totalAmount)}
+                    </p>
+                  </div>
+                  <div className="bg-muted rounded-lg p-4">
+                    <p className="text-sm text-muted-foreground">Itens</p>
+                    <p className="text-2xl font-bold">{selectedUnitData.items.length}</p>
+                  </div>
+                </div>
+                
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Descrição</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedUnitData.items.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{item.description}</TableCell>
+                        <TableCell>{formatDate(item.dueDate)}</TableCell>
+                        <TableCell>
+                          <BillingStatusBadge status={item.status} />
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(item.amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+            <CardFooter className="justify-between border-t pt-4">
+              <p className="text-sm text-muted-foreground">
+                Resumo gerado em: {new Date().toLocaleDateString('pt-BR')}
+              </p>
+              <Button onClick={onClose} variant="outline">Fechar</Button>
+            </CardFooter>
+          </Card>
+        )}
+        
+        {groupedBillings.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-32 text-center p-4">
+            <Building className="h-8 w-8 text-muted-foreground mb-2" />
+            <p className="text-muted-foreground">Nenhuma cobrança pendente ou atrasada foi encontrada.</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="container max-w-7xl mx-auto py-6 space-y-6 animate-fade-in">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Cobranças</h1>
-        <p className="text-muted-foreground animate-slide-in-top animation-delay-200">
-          Gerencie as cobranças do condomínio e acompanhe os pagamentos.
-        </p>
+      <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Cobranças</h1>
+          <p className="text-muted-foreground animate-slide-in-top animation-delay-200">
+            Gerencie as cobranças do condomínio.
+          </p>
+        </div>
+        
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" asChild>
+            <a href="/invoice-history">
+              <FileText size={16} />
+              <span>Histórico de Faturas</span>
+            </a>
+          </Button>
+          
+          <Button className="gap-2" onClick={() => setIsNewBillingDialogOpen(true)}>
+            <Plus size={16} />
+            <span>Nova Cobrança</span>
+          </Button>
+        </div>
       </div>
 
       <div className="flex justify-end gap-2">
-        <Dialog open={isNewBillingOpen} onOpenChange={setIsNewBillingOpen}>
+        <Dialog open={isSummaryDialogOpen} onOpenChange={setIsSummaryDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <Receipt size={16} />
+              <span>Gerar Resumo</span>
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[700px]">
+            <DialogHeader>
+              <DialogTitle>Resumo de Cobranças por Unidade</DialogTitle>
+              <DialogDescription>
+                Selecione uma unidade para gerar o resumo de cobranças pendentes e em atraso.
+              </DialogDescription>
+            </DialogHeader>
+            <BillingsSummary 
+              billings={billings.map(b => ({
+                id: b.id,
+                unit: b.unit,
+                resident: b.resident,
+                description: b.description,
+                amount: b.amount,
+                dueDate: b.dueDate,
+                status: b.status,
+                isPrinted: b.is_printed,
+                isSent: b.is_sent
+              }))} 
+              onClose={() => setIsSummaryDialogOpen(false)} 
+            />
+          </DialogContent>
+        </Dialog>
+        
+        <Dialog open={isNewBillingDialogOpen} onOpenChange={setIsNewBillingDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus size={16} />
@@ -448,7 +751,7 @@ const Billing = () => {
               </DialogDescription>
             </DialogHeader>
             <NewBillingForm 
-              onClose={() => setIsNewBillingOpen(false)} 
+              onClose={() => setIsNewBillingDialogOpen(false)} 
               onSave={fetchBillings}
             />
           </DialogContent>

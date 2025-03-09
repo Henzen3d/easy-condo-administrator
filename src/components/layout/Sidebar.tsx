@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { Link, useLocation } from "react-router-dom";
@@ -15,7 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  Gauge
+  Gauge,
+  FilePlus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -75,8 +75,13 @@ export function Sidebar({
       href: "/billing",
     },
     {
-      label: "Faturamento",
+      label: "Histórico de Faturas",
       icon: <FileText size={20} />,
+      href: "/invoice-history",
+    },
+    {
+      label: "Faturamento",
+      icon: <FilePlus size={20} />,
       href: "/billing-generator",
     },
     {

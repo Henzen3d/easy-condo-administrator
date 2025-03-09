@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,9 +57,16 @@ export default function BillingGeneratorConsumption({
   const [waterRate, setWaterRate] = useState<UtilityRate | null>(null);
   const [gasConsumptionData, setGasConsumptionData] = useState<ConsumptionData[]>([]);
   const [waterConsumptionData, setWaterConsumptionData] = useState<ConsumptionData[]>([]);
+  const [refreshCounter, setRefreshCounter] = useState(0);
+  
+  // Cache para armazenar leituras e evitar múltiplas requisições ao banco
+  const readingsCache = useRef<Record<string, any>>({});
+  
   const [editingReading, setEditingReading] = useState<{
     unitId: number;
     utilityType: 'gas' | 'water';
+    readingType: 'previous' | 'current';
+    readingId: number | null;
     value: string;
   } | null>(null);
   const [period, setPeriod] = useState({
@@ -168,7 +175,6 @@ export default function BillingGeneratorConsumption({
       toast({
         title: "Erro ao carregar unidades",
         description: "Não foi possível carregar a lista de unidades.",
-        variant: "destructive"
       });
     }
   };
@@ -216,13 +222,20 @@ export default function BillingGeneratorConsumption({
       toast({
         title: "Erro ao carregar taxas",
         description: "Não foi possível carregar as taxas atuais.",
-        variant: "destructive"
       });
     }
   };
 
   const fetchReadingsForPeriod = async (unit_id: number, utility_type: 'gas' | 'water') => {
     if (!period.start_date || !period.end_date) return { previous: null, current: null };
+
+    // Criar uma chave única para o cache
+    const cacheKey = `${unit_id}-${utility_type}-${period.start_date}-${period.end_date}`;
+    
+    // Verificar se já temos os dados em cache
+    if (readingsCache.current[cacheKey]) {
+      return readingsCache.current[cacheKey];
+    }
 
     try {
       // Get previous reading (before start date)
@@ -280,13 +293,34 @@ export default function BillingGeneratorConsumption({
         utility_type: currentData[0].utility_type as "gas" | "water"
       } : null;
 
-      // Se a leitura atual e anterior forem as mesmas, não considerar como leitura anterior
+      // Se a leitura atual e anterior forem as mesmas, verificar se são realmente a mesma leitura
+      // ou se são leituras diferentes com o mesmo valor
       if (previous && current && previous.id === current.id) {
-        previous = null;
+        // São a mesma leitura (mesmo ID), então consideramos sem leitura anterior
         console.log(`Leitura anterior e atual são iguais para ${utility_type} da unidade ${unit_id}, considerando sem leitura anterior`);
+        previous = null;
+      } else if (previous && current && previous.reading_value === current.reading_value && previous.reading_date === current.reading_date) {
+        // São leituras diferentes, mas com o mesmo valor e mesma data
+        // Verificar se a leitura anterior foi adicionada recentemente (nos últimos 5 minutos)
+        const previousDate = new Date(previous.created_at || previous.updated_at || '');
+        const now = new Date();
+        const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+        
+        if (previousDate > fiveMinutesAgo) {
+          // Leitura anterior foi adicionada recentemente, manter como leitura anterior
+          console.log(`Leitura anterior foi adicionada recentemente para ${utility_type} da unidade ${unit_id}, mantendo como leitura anterior`);
+        } else {
+          // Leitura anterior não foi adicionada recentemente, considerar sem leitura anterior
+          console.log(`Leituras com mesmo valor e data para ${utility_type} da unidade ${unit_id}, considerando sem leitura anterior`);
+          previous = null;
+        }
       }
 
-      return { previous, current };
+      // Armazenar o resultado no cache
+      const result = { previous, current };
+      readingsCache.current[cacheKey] = result;
+      
+      return result;
     } catch (error) {
       console.error(`Error fetching readings for unit ${unit_id}:`, error);
       return { previous: null, current: null };
@@ -295,17 +329,44 @@ export default function BillingGeneratorConsumption({
 
   const calculateConsumption = async () => {
     if (!period.start_date || !period.end_date) {
-      toast({
-        title: "Período não definido",
-        description: "Por favor, defina o período para calcular o consumo.",
-        variant: "destructive"
+      // Se não houver período definido, usar um período padrão (mês atual)
+      const today = new Date();
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      
+      const formattedFirstDay = firstDayOfMonth.toISOString().split('T')[0];
+      const formattedLastDay = lastDayOfMonth.toISOString().split('T')[0];
+      
+      console.log(`Período não definido. Usando período padrão: ${formattedFirstDay} a ${formattedLastDay}`);
+      
+      // Atualizar o período
+      setPeriod({
+        start_date: formattedFirstDay,
+        end_date: formattedLastDay
       });
-      return;
+      
+      // Atualizar o billingData
+      updateBillingData({
+        statementPeriod: {
+          startDate: formattedFirstDay,
+          endDate: formattedLastDay
+        }
+      });
+      
+      // Não exibir toast para não confundir o usuário
+      // Continuar com o cálculo usando o período padrão
     }
 
     setLoading(true);
 
     try {
+      // Limpar o cache de leituras para garantir que os dados mais recentes sejam obtidos
+      console.log("Limpando cache de leituras para recalcular consumo");
+      readingsCache.current = {};
+      
+      // Pequeno atraso para garantir que as leituras recém-adicionadas estejam disponíveis no banco
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       const gasConsumptionPromises = units.map(async (unit) => {
         const { previous, current } = await fetchReadingsForPeriod(unit.id, 'gas');
         
@@ -322,6 +383,12 @@ export default function BillingGeneratorConsumption({
             console.warn(`Leitura atual de gás (${current.reading_value}) é menor que a anterior (${previous.reading_value}) para unidade ${unit.id}`);
             consumption = 0;
             total = 0;
+            
+            // Notificar o usuário sobre o problema
+            toast({
+              title: "Aviso",
+              description: `A leitura atual de gás para a unidade ${unit.block}-${unit.number} é menor que a anterior. O consumo foi considerado como zero.`
+            });
           }
         }
 
@@ -353,6 +420,12 @@ export default function BillingGeneratorConsumption({
             console.warn(`Leitura atual de água (${current.reading_value}) é menor que a anterior (${previous.reading_value}) para unidade ${unit.id}`);
             consumption = 0;
             total = 0;
+            
+            // Notificar o usuário sobre o problema
+            toast({
+              title: "Aviso",
+              description: `A leitura atual de água para a unidade ${unit.block}-${unit.number} é menor que a anterior. O consumo foi considerado como zero.`
+            });
           }
         }
 
@@ -387,7 +460,6 @@ export default function BillingGeneratorConsumption({
       toast({
         title: "Erro ao calcular consumo",
         description: "Ocorreu um erro ao calcular o consumo das unidades.",
-        variant: "destructive"
       });
     } finally {
       setLoading(false);
@@ -426,21 +498,64 @@ export default function BillingGeneratorConsumption({
   };
 
   // Função para iniciar a edição de uma leitura anterior
-  const startEditingReading = (unitId: number, utilityType: 'gas' | 'water') => {
+  const startEditingReading = (
+    unitId: number, 
+    utilityType: 'gas' | 'water', 
+    readingType: 'previous' | 'current',
+    readingId: number | null,
+    currentValue: number | null
+  ) => {
+    // Permite editar qualquer leitura, seja ela anterior ou atual, existente ou nova
     setEditingReading({
       unitId,
       utilityType,
-      value: ""
+      readingType,
+      readingId,
+      value: currentValue !== null ? currentValue.toString() : ""
     });
+    
+    // Log para debug
+    console.log("Iniciando edição de leitura:", {
+      unitId,
+      utilityType,
+      readingType,
+      readingId,
+      currentValue
+    });
+    
+    // Se não houver período definido, definir um período padrão
+    if (!period.start_date || !period.end_date) {
+      const today = new Date();
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      
+      const formattedFirstDay = firstDayOfMonth.toISOString().split('T')[0];
+      const formattedLastDay = lastDayOfMonth.toISOString().split('T')[0];
+      
+      console.log(`Definindo período padrão para edição: ${formattedFirstDay} a ${formattedLastDay}`);
+      
+      // Atualizar o período
+      setPeriod({
+        start_date: formattedFirstDay,
+        end_date: formattedLastDay
+      });
+      
+      // Atualizar o billingData
+      updateBillingData({
+        statementPeriod: {
+          startDate: formattedFirstDay,
+          endDate: formattedLastDay
+        }
+      });
+    }
   };
 
-  // Função para salvar uma leitura anterior
-  const saveInitialReading = async () => {
-    if (!editingReading || !editingReading.value || parseFloat(editingReading.value) <= 0) {
+  // Função para salvar uma leitura
+  const saveReading = async () => {
+    if (!editingReading || !editingReading.value || parseFloat(editingReading.value) < 0) {
       toast({
         title: "Valor inválido",
         description: "Por favor, insira um valor válido para a leitura.",
-        variant: "destructive"
       });
       return;
     }
@@ -448,35 +563,106 @@ export default function BillingGeneratorConsumption({
     setLoading(true);
 
     try {
-      // Salvar a leitura no banco de dados
-      const readingDate = period.start_date;
-      const { error } = await supabase
-        .from('meter_readings')
-        .insert([{
+      const readingValue = parseFloat(editingReading.value);
+      
+      // Determinar a data da leitura
+      let readingDate;
+      if (editingReading.readingType === 'previous') {
+        // Para leituras anteriores, usar a data de início do período ou a data atual se não houver período
+        const baseDate = period.start_date || new Date().toISOString().split('T')[0];
+        
+        // Ajustar a data para ser um dia antes do início do período para garantir que seja diferente
+        const date = new Date(baseDate);
+        date.setDate(date.getDate() - 1);
+        readingDate = date.toISOString().split('T')[0];
+        
+        console.log(`Usando data ajustada para leitura anterior: ${readingDate} (baseada em ${baseDate})`);
+      } else {
+        // Para leituras atuais, usar a data de fim do período ou a data atual se não houver período
+        readingDate = period.end_date || new Date().toISOString().split('T')[0];
+      }
+
+      let readingId = editingReading.readingId;
+
+      if (editingReading.readingId) {
+        // Atualizar leitura existente
+        const { error } = await supabase
+          .from('meter_readings')
+          .update({
+            reading_value: readingValue,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingReading.readingId);
+
+        if (error) throw error;
+
+        toast({
+          title: "Leitura atualizada com sucesso",
+          description: "A leitura foi atualizada e os cálculos serão refeitos."
+        });
+      } else {
+        // Inserir nova leitura
+        console.log("Inserindo nova leitura:", {
           unit_id: editingReading.unitId,
           utility_type: editingReading.utilityType,
-          reading_value: parseFloat(editingReading.value),
+          reading_value: readingValue,
           reading_date: readingDate
-        }]);
+        });
+        
+        const { data, error } = await supabase
+          .from('meter_readings')
+          .insert([{
+            unit_id: editingReading.unitId,
+            utility_type: editingReading.utilityType,
+            reading_value: readingValue,
+            reading_date: readingDate,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }])
+          .select();
 
-      if (error) throw error;
+        if (error) {
+          console.error("Erro ao inserir leitura:", error);
+          throw error;
+        }
 
-      toast({
-        title: "Leitura salva com sucesso",
-        description: "A leitura inicial foi registrada e será usada para cálculos futuros."
-      });
+        // Armazenar o ID da nova leitura
+        if (data && data.length > 0) {
+          readingId = data[0].id;
+          console.log("Nova leitura inserida com ID:", readingId);
+        }
 
-      // Recalcular o consumo
-      calculateConsumption();
+        toast({
+          title: "Leitura salva com sucesso",
+          description: "A leitura foi registrada e será usada para os cálculos."
+        });
+      }
+
+      // Limpar o cache para forçar a recarga dos dados
+      readingsCache.current = {};
       
       // Limpar o estado de edição
       setEditingReading(null);
+      
+      // Incrementar o contador de atualização para forçar a recarga dos dados
+      setRefreshCounter(prev => prev + 1);
+      
+      // Recalcular o consumo
+      await calculateConsumption();
+      
+      // Atualizar o billingData com as informações de consumo
+      updateBillingData({
+        gasConsumptionData: gasConsumptionData,
+        waterConsumptionData: waterConsumptionData,
+        includeGasConsumption: billingData.includeGasConsumption,
+        includeWaterConsumption: billingData.includeWaterConsumption,
+        consumptionPeriod: period
+      });
     } catch (error) {
-      console.error("Erro ao salvar leitura inicial:", error);
+      console.error("Erro ao salvar leitura:", error);
       toast({
         title: "Erro ao salvar leitura",
-        description: "Não foi possível salvar a leitura inicial.",
-        variant: "destructive"
+        description: "Não foi possível salvar a leitura.",
       });
     } finally {
       setLoading(false);
@@ -487,6 +673,14 @@ export default function BillingGeneratorConsumption({
   const cancelEditingReading = () => {
     setEditingReading(null);
   };
+
+  // Adicionar useEffect para recalcular o consumo quando o contador de atualização mudar
+  useEffect(() => {
+    if (refreshCounter > 0) {
+      console.log(`Atualizando dados devido ao refreshCounter: ${refreshCounter}`);
+      calculateConsumption();
+    }
+  }, [refreshCounter]);
 
   return (
     <div className="space-y-6">
@@ -550,7 +744,7 @@ export default function BillingGeneratorConsumption({
           </div>
           
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -558,15 +752,15 @@ export default function BillingGeneratorConsumption({
                     <TableHead>Leitura Anterior</TableHead>
                     <TableHead>Leitura Atual</TableHead>
                     <TableHead>Consumo (m³)</TableHead>
-                    <TableHead>Taxa (R$/m³)</TableHead>
-                    <TableHead>Total (R$)</TableHead>
+                    <TableHead>Valor (R$/m³)</TableHead>
+                    <TableHead>Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {gasConsumptionData.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-4">
-                        {loading ? "Calculando consumo..." : "Nenhum dado de consumo disponível"}
+                      <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
+                        Nenhuma unidade encontrada ou período não definido.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -576,7 +770,8 @@ export default function BillingGeneratorConsumption({
                         <TableCell>
                           {editingReading && 
                            editingReading.unitId === item.unit_id && 
-                           editingReading.utilityType === 'gas' ? (
+                           editingReading.utilityType === 'gas' &&
+                           editingReading.readingType === 'previous' ? (
                             <div className="flex flex-col gap-2">
                               <Input
                                 type="number"
@@ -593,7 +788,7 @@ export default function BillingGeneratorConsumption({
                                 <Button 
                                   size="sm" 
                                   variant="outline" 
-                                  onClick={saveInitialReading}
+                                  onClick={saveReading}
                                   disabled={loading}
                                 >
                                   Salvar
@@ -610,7 +805,25 @@ export default function BillingGeneratorConsumption({
                             </div>
                           ) : item.previous_reading ? (
                             <div className="text-sm">
-                              <div>{item.previous_reading.reading_value} m³</div>
+                              <div className="flex items-center gap-1">
+                                <span>{item.previous_reading.reading_value} m³</span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6" 
+                                  onClick={() => startEditingReading(
+                                    item.unit_id, 
+                                    'gas', 
+                                    'previous',
+                                    item.previous_reading?.id || null,
+                                    item.previous_reading?.reading_value || null
+                                  )}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                                  </svg>
+                                </Button>
+                              </div>
                               <div className="text-xs text-muted-foreground">
                                 {formatDate(item.previous_reading.reading_date)}
                                 {item.current_reading && item.previous_reading.reading_date === item.current_reading.reading_date ? (
@@ -621,7 +834,7 @@ export default function BillingGeneratorConsumption({
                           ) : (
                             <button 
                               className="text-amber-600 hover:text-amber-800 hover:underline focus:outline-none"
-                              onClick={() => startEditingReading(item.unit_id, 'gas')}
+                              onClick={() => startEditingReading(item.unit_id, 'gas', 'previous', null, null)}
                             >
                               Sem leitura anterior
                               <div className="text-xs">Clique para adicionar</div>
@@ -629,15 +842,74 @@ export default function BillingGeneratorConsumption({
                           )}
                         </TableCell>
                         <TableCell>
-                          {item.current_reading ? (
+                          {editingReading && 
+                           editingReading.unitId === item.unit_id && 
+                           editingReading.utilityType === 'gas' &&
+                           editingReading.readingType === 'current' ? (
+                            <div className="flex flex-col gap-2">
+                              <Input
+                                type="number"
+                                step="0.001"
+                                placeholder="Valor da leitura"
+                                value={editingReading.value}
+                                onChange={(e) => setEditingReading({
+                                  ...editingReading,
+                                  value: e.target.value
+                                })}
+                                className="w-32"
+                              />
+                              <div className="flex gap-1">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  onClick={saveReading}
+                                  disabled={loading}
+                                >
+                                  Salvar
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  onClick={cancelEditingReading}
+                                  disabled={loading}
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : item.current_reading ? (
                             <div className="text-sm">
-                              <div>{item.current_reading.reading_value} m³</div>
+                              <div className="flex items-center gap-1">
+                                <span>{item.current_reading.reading_value} m³</span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6" 
+                                  onClick={() => startEditingReading(
+                                    item.unit_id, 
+                                    'gas', 
+                                    'current',
+                                    item.current_reading?.id || null,
+                                    item.current_reading?.reading_value || null
+                                  )}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                                  </svg>
+                                </Button>
+                              </div>
                               <div className="text-xs text-muted-foreground">
                                 {formatDate(item.current_reading.reading_date)}
                               </div>
                             </div>
                           ) : (
-                            <span className="text-amber-600">Sem leitura</span>
+                            <button 
+                              className="text-amber-600 hover:text-amber-800 hover:underline focus:outline-none"
+                              onClick={() => startEditingReading(item.unit_id, 'gas', 'current', null, null)}
+                            >
+                              Sem leitura
+                              <div className="text-xs">Clique para adicionar</div>
+                            </button>
                           )}
                         </TableCell>
                         <TableCell>
@@ -677,7 +949,7 @@ export default function BillingGeneratorConsumption({
           </div>
           
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -685,15 +957,15 @@ export default function BillingGeneratorConsumption({
                     <TableHead>Leitura Anterior</TableHead>
                     <TableHead>Leitura Atual</TableHead>
                     <TableHead>Consumo (m³)</TableHead>
-                    <TableHead>Taxa (R$/m³)</TableHead>
-                    <TableHead>Total (R$)</TableHead>
+                    <TableHead>Valor (R$/m³)</TableHead>
+                    <TableHead>Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {waterConsumptionData.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-4">
-                        {loading ? "Calculando consumo..." : "Nenhum dado de consumo disponível"}
+                      <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
+                        Nenhuma unidade encontrada ou período não definido.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -703,7 +975,8 @@ export default function BillingGeneratorConsumption({
                         <TableCell>
                           {editingReading && 
                            editingReading.unitId === item.unit_id && 
-                           editingReading.utilityType === 'water' ? (
+                           editingReading.utilityType === 'water' &&
+                           editingReading.readingType === 'previous' ? (
                             <div className="flex flex-col gap-2">
                               <Input
                                 type="number"
@@ -720,7 +993,7 @@ export default function BillingGeneratorConsumption({
                                 <Button 
                                   size="sm" 
                                   variant="outline" 
-                                  onClick={saveInitialReading}
+                                  onClick={saveReading}
                                   disabled={loading}
                                 >
                                   Salvar
@@ -737,7 +1010,25 @@ export default function BillingGeneratorConsumption({
                             </div>
                           ) : item.previous_reading ? (
                             <div className="text-sm">
-                              <div>{item.previous_reading.reading_value} m³</div>
+                              <div className="flex items-center gap-1">
+                                <span>{item.previous_reading.reading_value} m³</span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6" 
+                                  onClick={() => startEditingReading(
+                                    item.unit_id, 
+                                    'water', 
+                                    'previous',
+                                    item.previous_reading?.id || null,
+                                    item.previous_reading?.reading_value || null
+                                  )}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                                  </svg>
+                                </Button>
+                              </div>
                               <div className="text-xs text-muted-foreground">
                                 {formatDate(item.previous_reading.reading_date)}
                                 {item.current_reading && item.previous_reading.reading_date === item.current_reading.reading_date ? (
@@ -748,7 +1039,7 @@ export default function BillingGeneratorConsumption({
                           ) : (
                             <button 
                               className="text-amber-600 hover:text-amber-800 hover:underline focus:outline-none"
-                              onClick={() => startEditingReading(item.unit_id, 'water')}
+                              onClick={() => startEditingReading(item.unit_id, 'water', 'previous', null, null)}
                             >
                               Sem leitura anterior
                               <div className="text-xs">Clique para adicionar</div>
@@ -756,15 +1047,74 @@ export default function BillingGeneratorConsumption({
                           )}
                         </TableCell>
                         <TableCell>
-                          {item.current_reading ? (
+                          {editingReading && 
+                           editingReading.unitId === item.unit_id && 
+                           editingReading.utilityType === 'water' &&
+                           editingReading.readingType === 'current' ? (
+                            <div className="flex flex-col gap-2">
+                              <Input
+                                type="number"
+                                step="0.001"
+                                placeholder="Valor da leitura"
+                                value={editingReading.value}
+                                onChange={(e) => setEditingReading({
+                                  ...editingReading,
+                                  value: e.target.value
+                                })}
+                                className="w-32"
+                              />
+                              <div className="flex gap-1">
+                                <Button 
+                                  size="sm" 
+                                  variant="outline" 
+                                  onClick={saveReading}
+                                  disabled={loading}
+                                >
+                                  Salvar
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  onClick={cancelEditingReading}
+                                  disabled={loading}
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : item.current_reading ? (
                             <div className="text-sm">
-                              <div>{item.current_reading.reading_value} m³</div>
+                              <div className="flex items-center gap-1">
+                                <span>{item.current_reading.reading_value} m³</span>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon" 
+                                  className="h-6 w-6" 
+                                  onClick={() => startEditingReading(
+                                    item.unit_id, 
+                                    'water', 
+                                    'current',
+                                    item.current_reading?.id || null,
+                                    item.current_reading?.reading_value || null
+                                  )}
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path>
+                                  </svg>
+                                </Button>
+                              </div>
                               <div className="text-xs text-muted-foreground">
                                 {formatDate(item.current_reading.reading_date)}
                               </div>
                             </div>
                           ) : (
-                            <span className="text-amber-600">Sem leitura</span>
+                            <button 
+                              className="text-amber-600 hover:text-amber-800 hover:underline focus:outline-none"
+                              onClick={() => startEditingReading(item.unit_id, 'water', 'current', null, null)}
+                            >
+                              Sem leitura
+                              <div className="text-xs">Clique para adicionar</div>
+                            </button>
                           )}
                         </TableCell>
                         <TableCell>

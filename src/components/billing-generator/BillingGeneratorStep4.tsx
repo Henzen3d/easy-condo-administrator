@@ -1,8 +1,14 @@
-
-import { CalendarIcon, CheckCircle2, Droplet, Flame } from "lucide-react";
+import { useState, useEffect } from "react";
+import { CalendarIcon, CheckCircle2, Droplet, Flame, Download, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { pt } from 'date-fns/locale';
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { generateBillingsSummaryPDF } from "@/lib/pdfService";
+import { markBillingAsPrinted } from "@/lib/billingService";
+import { createInvoice } from "@/lib/invoiceService";
+import { supabase } from "@/integrations/supabase/client";
 
 interface BillingGeneratorStep4Props {
   billingData: any;
@@ -36,37 +42,190 @@ const getMonthName = (month: number) => {
 };
 
 const BillingGeneratorStep4 = ({ billingData }: BillingGeneratorStep4Props) => {
-  // Calculate total amount
-  const totalAmount = billingData.chargeItems?.reduce(
-    (sum: number, item: any) => sum + parseFloat(item.value || 0), 
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [units, setUnits] = useState<any[]>([]);
+  const [generatedInvoices, setGeneratedInvoices] = useState<string[]>([]);
+  
+  // Carregar unidades do banco de dados
+  useEffect(() => {
+    async function loadUnits() {
+      try {
+        const { data, error } = await supabase
+          .from('units')
+          .select('*')
+          .order('block')
+          .order('number');
+          
+        if (error) throw error;
+        setUnits(data || []);
+      } catch (error) {
+        console.error("Erro ao carregar unidades:", error);
+      }
+    }
+    
+    loadUnits();
+  }, []);
+  
+  // Calcular o total das cobranças selecionadas
+  const selectedBillings = billingData.existingBillings?.filter(
+    (billing: any) => billingData.selectedBillings?.includes(billing.id)
+  ) || [];
+  
+  const totalAmount = selectedBillings.reduce(
+    (sum: number, billing: any) => sum + billing.amount, 
     0
-  ) || 0;
+  );
   
-  // Determine discount amount if applicable
-  const discountAmount = billingData.earlyPaymentDiscount?.enabled 
-    ? billingData.earlyPaymentDiscount.discountType === "percentage"
-      ? totalAmount * (billingData.earlyPaymentDiscount.discountValue / 100)
-      : billingData.earlyPaymentDiscount.discountValue
-    : 0;
+  // Agrupar cobranças por unidade
+  const billingsByUnit = selectedBillings.reduce((acc: any, billing: any) => {
+    if (!acc[billing.unit]) {
+      acc[billing.unit] = {
+        unit: billing.unit,
+        unit_id: billing.unit_id,
+        resident: billing.resident,
+        billings: [],
+        total: 0
+      };
+    }
+    
+    acc[billing.unit].billings.push(billing);
+    acc[billing.unit].total += billing.amount;
+    
+    return acc;
+  }, {});
   
-  // Calculate final amount after discount
-  const finalAmount = totalAmount - discountAmount;
+  const unitGroups = Object.values(billingsByUnit);
   
-  // Determine units involved
-  const unitsDisplay = billingData.targetUnits === "all"
-    ? "Todas as Unidades"
-    : mockUnits.find(u => String(u.id) === String(billingData.targetUnits))
-      ? `${mockUnits.find(u => String(u.id) === String(billingData.targetUnits))?.block}-${mockUnits.find(u => String(u.id) === String(billingData.targetUnits))?.number}`
-      : "Unidade não encontrada";
-
-  // Count consumption items
-  const gasItems = billingData.chargeItems?.filter((item: any) => 
-    item.description?.includes('Consumo de Gás')
-  ).length || 0;
+  // Função para gerar PDF para uma unidade específica
+  const generatePDFForUnit = async (unitData: any) => {
+    try {
+      setIsGeneratingPDF(true);
+      
+      // Verificar se já foi gerada uma fatura para esta unidade
+      if (generatedInvoices.includes(unitData.unit)) {
+        toast.info(`Fatura para a unidade ${unitData.unit} já foi gerada`);
+        return;
+      }
+      
+      // Extrair os IDs das cobranças
+      const billingIds = unitData.billings.map((billing: any) => billing.id);
+      
+      // Criar a fatura no banco de dados
+      const invoice = await createInvoice(
+        unitData.unit_id,
+        unitData.unit,
+        unitData.resident,
+        billingData.dueDate || new Date().toISOString().split('T')[0],
+        billingIds,
+        billingData.reference.month,
+        billingData.reference.year,
+        billingData.notes
+      );
+      
+      if (!invoice) {
+        toast.error(`Falha ao criar fatura para a unidade ${unitData.unit}`);
+        return;
+      }
+      
+      // Adicionar à lista de faturas geradas
+      setGeneratedInvoices(prev => [...prev, unitData.unit]);
+      
+      // Gerar PDF usando o serviço
+      const pdfUrl = generateBillingsSummaryPDF(
+        unitData.unit,
+        unitData.resident,
+        unitData.billings,
+        unitData.total
+      );
+      
+      // Abrir o PDF em uma nova aba
+      window.open(pdfUrl, '_blank');
+      
+      // Marcar as cobranças como impressas
+      for (const billing of unitData.billings) {
+        await markBillingAsPrinted(billing.id);
+      }
+      
+      toast.success(`Fatura gerada com sucesso para a unidade ${unitData.unit}`);
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast.error(`Erro ao gerar fatura para a unidade ${unitData.unit}`);
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
   
-  const waterItems = billingData.chargeItems?.filter((item: any) => 
-    item.description?.includes('Consumo de Água')
-  ).length || 0;
+  // Função para gerar todos os PDFs
+  const generateAllPDFs = async () => {
+    try {
+      setIsGeneratingPDF(true);
+      
+      for (const unitData of unitGroups) {
+        // Verificar se já foi gerada uma fatura para esta unidade
+        if (generatedInvoices.includes(unitData.unit)) {
+          console.log(`Fatura para a unidade ${unitData.unit} já foi gerada, pulando...`);
+          continue;
+        }
+        
+        // Extrair os IDs das cobranças
+        const billingIds = unitData.billings.map((billing: any) => billing.id);
+        
+        // Criar a fatura no banco de dados
+        const invoice = await createInvoice(
+          unitData.unit_id,
+          unitData.unit,
+          unitData.resident,
+          billingData.dueDate || new Date().toISOString().split('T')[0],
+          billingIds,
+          billingData.reference.month,
+          billingData.reference.year,
+          billingData.notes
+        );
+        
+        if (!invoice) {
+          console.error(`Falha ao criar fatura para a unidade ${unitData.unit}`);
+          continue;
+        }
+        
+        // Adicionar à lista de faturas geradas
+        setGeneratedInvoices(prev => [...prev, unitData.unit]);
+        
+        // Gerar PDF usando o serviço
+        const pdfUrl = generateBillingsSummaryPDF(
+          unitData.unit,
+          unitData.resident,
+          unitData.billings,
+          unitData.total
+        );
+        
+        // Abrir o PDF em uma nova aba
+        window.open(pdfUrl, '_blank');
+        
+        // Marcar as cobranças como impressas
+        for (const billing of unitData.billings) {
+          await markBillingAsPrinted(billing.id);
+        }
+        
+        // Pequeno atraso para não sobrecarregar o navegador
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      toast.success(`${unitGroups.length} faturas geradas com sucesso`);
+    } catch (error) {
+      console.error("Erro ao gerar PDFs:", error);
+      toast.error("Erro ao gerar faturas");
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+  
+  // Formatar moeda
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
+  };
 
   return (
     <div className="space-y-6">
@@ -100,151 +259,114 @@ const BillingGeneratorStep4 = ({ billingData }: BillingGeneratorStep4Props) => {
                 </span>
               </li>
               <li className="flex justify-between">
-                <span className="text-muted-foreground">Data de Vencimento:</span>
+                <span className="text-muted-foreground">Período do Balancete:</span>
                 <span className="font-medium">
-                  {billingData.dueDate 
-                    ? format(new Date(billingData.dueDate), "dd/MM/yyyy") 
+                  {billingData.statementPeriod?.startDate && billingData.statementPeriod?.endDate
+                    ? `${format(new Date(billingData.statementPeriod.startDate), "dd/MM/yyyy")} a ${format(new Date(billingData.statementPeriod.endDate), "dd/MM/yyyy")}`
                     : "Não informado"}
                 </span>
               </li>
               <li className="flex justify-between">
-                <span className="text-muted-foreground">Unidades:</span>
-                <span className="font-medium">{unitsDisplay}</span>
+                <span className="text-muted-foreground">Data de Vencimento:</span>
+                <span className="font-medium">
+                  {billingData.dueDate
+                    ? format(new Date(billingData.dueDate), "dd/MM/yyyy")
+                    : "Não informado"}
+                </span>
               </li>
-              
-              {billingData.statementPeriod?.startDate && billingData.statementPeriod?.endDate && (
-                <li className="flex justify-between">
-                  <span className="text-muted-foreground">Período de Consumo:</span>
-                  <span className="font-medium">
-                    {format(new Date(billingData.statementPeriod.startDate), "dd/MM/yyyy")} a {format(new Date(billingData.statementPeriod.endDate), "dd/MM/yyyy")}
-                  </span>
-                </li>
-              )}
-              
-              {gasItems > 0 && (
-                <li className="flex justify-between text-amber-700 dark:text-amber-500">
-                  <span className="flex items-center">
-                    <Flame className="h-4 w-4 mr-1" />
-                    Consumo de Gás:
-                  </span>
-                  <span className="font-medium">{gasItems} unidade(s)</span>
-                </li>
-              )}
-              
-              {waterItems > 0 && (
-                <li className="flex justify-between text-blue-700 dark:text-blue-500">
-                  <span className="flex items-center">
-                    <Droplet className="h-4 w-4 mr-1" />
-                    Consumo de Água:
-                  </span>
-                  <span className="font-medium">{waterItems} unidade(s)</span>
-                </li>
-              )}
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Cobranças Selecionadas:</span>
+                <span className="font-medium">{selectedBillings.length}</span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Unidades com Cobranças:</span>
+                <span className="font-medium">{unitGroups.length}</span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Valor Total:</span>
+                <span className="font-medium">{formatCurrency(totalAmount)}</span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Faturas Geradas:</span>
+                <span className="font-medium">{generatedInvoices.length} de {unitGroups.length}</span>
+              </li>
             </ul>
           </CardContent>
         </Card>
         
         <Card>
           <CardContent className="p-6">
-            <h4 className="font-medium mb-4">Valores</h4>
+            <h4 className="font-medium mb-4">Cobranças por Unidade</h4>
             
-            <ul className="space-y-2 text-sm">
-              <li className="flex justify-between">
-                <span className="text-muted-foreground">Valor Total:</span>
-                <span className="font-medium">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-                    .format(totalAmount)}
-                </span>
-              </li>
-              
-              {billingData.earlyPaymentDiscount?.enabled && (
-                <>
-                  <li className="flex justify-between">
-                    <span className="text-muted-foreground">Desconto por Pontualidade:</span>
-                    <span className="font-medium text-green-600">
-                      {billingData.earlyPaymentDiscount.discountType === "percentage"
-                        ? `${billingData.earlyPaymentDiscount.discountValue}%`
-                        : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-                            .format(billingData.earlyPaymentDiscount.discountValue)}
-                    </span>
-                  </li>
-                  <li className="flex justify-between">
-                    <span className="text-muted-foreground">Data Limite para Desconto:</span>
-                    <span className="font-medium">
-                      {billingData.earlyPaymentDiscount.dueDate 
-                        ? format(new Date(billingData.earlyPaymentDiscount.dueDate), "dd/MM/yyyy") 
-                        : "Não informado"}
-                    </span>
-                  </li>
-                  <li className="flex justify-between">
-                    <span className="text-muted-foreground">Valor com Desconto:</span>
-                    <span className="font-medium text-green-600">
-                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-                        .format(finalAmount)}
-                    </span>
-                  </li>
-                </>
-              )}
-              
-              <li className="flex justify-between pt-2 mt-2 border-t">
-                <span className="text-muted-foreground">Itens de Cobrança:</span>
-                <span className="font-medium">{billingData.chargeItems?.length || 0} item(ns)</span>
-              </li>
-            </ul>
+            {unitGroups.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">
+                Nenhuma cobrança selecionada.
+              </p>
+            ) : (
+              <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                {unitGroups.map((unitData: any) => (
+                  <Card key={unitData.unit} className={`border ${generatedInvoices.includes(unitData.unit) ? 'border-green-500 bg-green-50' : 'border-muted'}`}>
+                    <CardContent className="p-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <h5 className="font-medium">{unitData.unit}</h5>
+                        <span className="text-sm font-bold">{formatCurrency(unitData.total)}</span>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">{unitData.resident}</p>
+                      <ul className="text-sm space-y-1">
+                        {unitData.billings.map((billing: any) => (
+                          <li key={billing.id} className="flex justify-between">
+                            <span className="truncate max-w-[200px]">{billing.description}</span>
+                            <span>{formatCurrency(billing.amount)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                    <CardFooter className="p-2 pt-0 flex justify-end">
+                      <Button 
+                        variant={generatedInvoices.includes(unitData.unit) ? "secondary" : "outline"}
+                        size="sm" 
+                        className="gap-1"
+                        onClick={() => generatePDFForUnit(unitData)}
+                        disabled={isGeneratingPDF}
+                      >
+                        <FileText size={14} />
+                        <span>{generatedInvoices.includes(unitData.unit) ? "Reimprimir" : "Gerar Fatura"}</span>
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
       
-      {billingData.chargeItems?.length > 0 && (
-        <Card>
-          <CardContent className="p-6">
-            <h4 className="font-medium mb-4">Detalhamento dos Itens</h4>
-            
-            <ul className="divide-y">
-              {billingData.chargeItems.map((item: any, index: number) => {
-                const category = chargeCategories.find(cat => cat.id === item.category)?.name || item.category;
-                const unitDisplay = item.unit === "all" 
-                  ? "Todas as Unidades" 
-                  : mockUnits.find(u => String(u.id) === String(item.unit))
-                    ? `${mockUnits.find(u => String(u.id) === String(item.unit))?.block}-${mockUnits.find(u => String(u.id) === String(item.unit))?.number}`
-                    : "Unidade não encontrada";
-                
-                // Check if this is a gas or water consumption item
-                const isGasItem = item.description?.includes('Consumo de Gás');
-                const isWaterItem = item.description?.includes('Consumo de Água');
-                const icon = isGasItem ? <Flame className="h-4 w-4 mr-1 text-amber-600" /> : 
-                       isWaterItem ? <Droplet className="h-4 w-4 mr-1 text-blue-600" /> : null;
-                
-                return (
-                  <li key={item.id || index} className="py-2">
-                    <div className="flex justify-between">
-                      <div>
-                        <p className="font-medium flex items-center">
-                          {icon}
-                          {item.description}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {category} • {unitDisplay}
-                        </p>
-                      </div>
-                      <p className="font-medium">
-                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
-                          .format(parseFloat(item.value || 0))}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </CardContent>
-        </Card>
+      {unitGroups.length > 0 && (
+        <div className="flex justify-center mt-8">
+          <Button 
+            size="lg" 
+            className="gap-2"
+            onClick={generateAllPDFs}
+            disabled={isGeneratingPDF || generatedInvoices.length === unitGroups.length}
+          >
+            <Download size={18} />
+            <span>
+              {isGeneratingPDF 
+                ? "Gerando Faturas..." 
+                : generatedInvoices.length === unitGroups.length
+                  ? "Todas as Faturas Geradas"
+                  : `Gerar ${unitGroups.length - generatedInvoices.length} Faturas Restantes`
+              }
+            </span>
+          </Button>
+        </div>
       )}
       
-      {billingData.additionalMessage && (
-        <Card>
+      {billingData.notes && (
+        <Card className="mt-6">
           <CardContent className="p-6">
-            <h4 className="font-medium mb-2">Mensagem Adicional</h4>
-            <p className="text-sm whitespace-pre-line">{billingData.additionalMessage}</p>
+            <h4 className="font-medium mb-2">Observações</h4>
+            <p className="text-sm whitespace-pre-line">{billingData.notes}</p>
           </CardContent>
         </Card>
       )}
