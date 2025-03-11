@@ -40,67 +40,133 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { fetchBillings, createBilling, Billing } from "@/lib/billingService";
-import { toast } from "sonner";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 interface BillingGeneratorStep3Props {
   billingData: any;
   updateBillingData: (data: any) => void;
+  nextStep: () => void;
+  prevStep: () => void;
 }
 
 const BillingGeneratorStep3 = ({ 
   billingData, 
-  updateBillingData 
+  updateBillingData,
+  nextStep,
+  prevStep 
 }: BillingGeneratorStep3Props) => {
+  const { toast } = useToast();
   const [existingBillings, setExistingBillings] = useState<Billing[]>([]);
   const [filteredBillings, setFilteredBillings] = useState<Billing[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedBillings, setSelectedBillings] = useState<string[]>([]);
+  const [selectedBillings, setSelectedBillings] = useState<string[]>(billingData.selectedBillings || []);
   const [showNewBillingDialog, setShowNewBillingDialog] = useState(false);
   const [units, setUnits] = useState<{id: number, block: string, number: string}[]>([]);
   const [residents, setResidents] = useState<{id: number, name: string, unit_id: number}[]>([]);
-  
-  // Estados para o formulário de nova cobrança
   const [newBilling, setNewBilling] = useState({
     unit: "",
-    unit_id: null as number | null,
+    unit_id: 0,
     resident: "",
+    resident_id: 0,
     description: "",
-    amount: "",
-    dueDate: new Date().toISOString().split('T')[0],
-    status: "pending" as const
+    amount: 0,
+    dueDate: new Date().toISOString(),
+    category: "taxa"
   });
   
   // Carregar cobranças existentes
   useEffect(() => {
-    async function loadBillings() {
-      setIsLoading(true);
+    const loadExistingBillings = async () => {
       try {
-        const billings = await fetchBillings();
+        setIsLoading(true);
+        console.log("Iniciando carregamento de cobranças existentes...");
         
-        // Filtrar apenas cobranças pendentes e atrasadas
-        const relevantBillings = billings.filter(
-          billing => billing.status === 'pending' || billing.status === 'overdue'
-        );
+        // Tentar usar a função fetchBillings
+        try {
+          console.log("Tentando usar fetchBillings...");
+          const billings = await fetchBillings();
+          console.log("Cobranças carregadas via fetchBillings:", billings);
+          
+          if (billings && billings.length > 0) {
+            setExistingBillings(billings);
+            
+            // Filtrar apenas cobranças pendentes ou vencidas
+            const filtered = billings.filter(
+              billing => billing.status === 'pending' || billing.status === 'overdue'
+            );
+            setFilteredBillings(filtered);
+            console.log("Cobranças filtradas:", filtered);
+            setIsLoading(false);
+            return;
+          } else {
+            console.log("Nenhuma cobrança retornada por fetchBillings, tentando buscar diretamente do Supabase...");
+          }
+        } catch (fetchError) {
+          console.error("Erro ao usar fetchBillings:", fetchError);
+          console.log("Tentando buscar cobranças diretamente do Supabase...");
+        }
         
-        setExistingBillings(relevantBillings);
-        setFilteredBillings(relevantBillings);
+        // Se fetchBillings falhar ou não retornar dados, buscar diretamente do Supabase
+        const { data, error } = await supabase
+          .from('billings')
+          .select('*')
+          .or('status.eq.pending,status.eq.overdue');
+          
+        if (error) {
+          throw error;
+        }
         
-        // Atualizar o billingData com as cobranças existentes
-        updateBillingData({
-          existingBillings: relevantBillings,
-          selectedBillings: selectedBillings
-        });
+        console.log("Cobranças carregadas diretamente do Supabase:", data);
+        
+        if (data) {
+          // Mapear os dados para o formato esperado
+          const formattedBillings = data.map(billing => ({
+            id: billing.id,
+            unit: billing.unit,
+            unit_id: billing.unit_id,
+            resident: billing.resident,
+            description: billing.description,
+            amount: billing.amount,
+            dueDate: billing.due_date,
+            status: billing.status,
+            isPrinted: billing.is_printed,
+            isSent: billing.is_sent
+          }));
+          
+          setExistingBillings(formattedBillings);
+          setFilteredBillings(formattedBillings);
+          console.log("Cobranças formatadas:", formattedBillings);
+        } else {
+          setExistingBillings([]);
+          setFilteredBillings([]);
+          console.log("Nenhuma cobrança encontrada");
+        }
       } catch (error) {
-        console.error("Erro ao carregar cobranças:", error);
-        toast.error("Erro ao carregar cobranças existentes");
+        console.error("Erro ao carregar cobranças existentes:", error);
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar cobranças existentes",
+          variant: "destructive"
+        });
+        
+        // Em caso de erro, definir listas vazias para evitar loading infinito
+        setExistingBillings([]);
+        setFilteredBillings([]);
       } finally {
         setIsLoading(false);
       }
-    }
+    };
     
-    async function loadUnitsAndResidents() {
+    loadExistingBillings();
+  }, [toast]);
+  
+  // Carregar unidades e residentes
+  useEffect(() => {
+    const loadUnitsAndResidents = async () => {
       try {
+        console.log("Carregando unidades e residentes...");
+        
         // Carregar unidades
         const { data: unitsData, error: unitsError } = await supabase
           .from('units')
@@ -108,34 +174,50 @@ const BillingGeneratorStep3 = ({
           .order('block')
           .order('number');
           
-        if (unitsError) throw unitsError;
+        if (unitsError) {
+          throw unitsError;
+        }
+        
+        console.log("Unidades carregadas:", unitsData);
         setUnits(unitsData || []);
         
         // Carregar residentes
         const { data: residentsData, error: residentsError } = await supabase
           .from('residents')
-          .select('id, name, unit_id');
+          .select('id, name, unit_id')
+          .order('name');
           
-        if (residentsError) throw residentsError;
+        if (residentsError) {
+          throw residentsError;
+        }
+        
+        console.log("Residentes carregados:", residentsData);
         setResidents(residentsData || []);
       } catch (error) {
         console.error("Erro ao carregar unidades e residentes:", error);
+        toast({
+          title: "Erro",
+          description: "Erro ao carregar unidades e residentes",
+          variant: "destructive"
+        });
       }
-    }
+    };
     
-    loadBillings();
     loadUnitsAndResidents();
-  }, []);
+  }, [toast]);
   
   // Atualizar billingData quando selectedBillings mudar
   useEffect(() => {
+    console.log("Atualizando billingData com selectedBillings:", selectedBillings);
     updateBillingData({
       selectedBillings: selectedBillings
     });
-  }, [selectedBillings]);
+  }, [selectedBillings, updateBillingData]);
   
+  // Função para lidar com a mudança de data
   const handleDateChange = (field: string, date: Date | undefined) => {
     if (date) {
+      console.log(`Alterando ${field} para:`, date);
       if (field === 'startDate') {
         updateBillingData({
           statementPeriod: {
@@ -154,7 +236,9 @@ const BillingGeneratorStep3 = ({
     }
   };
   
+  // Função para lidar com a seleção de cobrança
   const handleBillingSelection = (billingId: string) => {
+    console.log("Selecionando/desselecionando cobrança:", billingId);
     setSelectedBillings(prev => {
       if (prev.includes(billingId)) {
         return prev.filter(id => id !== billingId);
@@ -164,7 +248,9 @@ const BillingGeneratorStep3 = ({
     });
   };
   
+  // Função para selecionar/desselecionar todas as cobranças
   const handleSelectAllBillings = () => {
+    console.log("Selecionando/desselecionando todas as cobranças");
     if (selectedBillings.length === filteredBillings.length) {
       // Se todas já estão selecionadas, desmarcar todas
       setSelectedBillings([]);
@@ -174,7 +260,9 @@ const BillingGeneratorStep3 = ({
     }
   };
   
+  // Função para lidar com a mudança de unidade
   const handleUnitChange = (value: string) => {
+    console.log("Unidade selecionada:", value);
     const unitId = parseInt(value);
     setNewBilling({
       ...newBilling,
@@ -188,93 +276,141 @@ const BillingGeneratorStep3 = ({
       if (unitObj) {
         const unitResident = residents.find(r => r.unit_id === unitId);
         if (unitResident) {
+          console.log("Residente encontrado para a unidade:", unitResident);
           setNewBilling(prev => ({
             ...prev,
-            resident: unitResident.name
+            resident: unitResident.name,
+            resident_id: unitResident.id
+          }));
+        } else {
+          console.log("Nenhum residente encontrado para a unidade");
+          setNewBilling(prev => ({
+            ...prev,
+            resident: `Proprietário ${unitObj.block}-${unitObj.number}`,
+            resident_id: 0
           }));
         }
       }
     }
   };
   
+  // Função para criar nova cobrança
   const handleCreateNewBilling = async () => {
+    console.log("Criando nova cobrança:", newBilling);
     try {
-      // Validação básica
-      if (!newBilling.unit || !newBilling.resident || !newBilling.description || 
-          !newBilling.amount || !newBilling.dueDate) {
-        toast.error("Por favor, preencha todos os campos obrigatórios");
+      // Validar campos obrigatórios
+      if (!newBilling.unit_id || !newBilling.description || !newBilling.dueDate) {
+        toast({
+          title: "Erro",
+          description: "Por favor, preencha todos os campos obrigatórios",
+          variant: "destructive"
+        });
         return;
       }
       
-      const amount = parseFloat(newBilling.amount.toString().replace(',', '.'));
-      if (isNaN(amount) || amount <= 0) {
-        toast.error("Por favor, informe um valor válido");
+      // Validar valor
+      if (!newBilling.amount || newBilling.amount <= 0) {
+        toast({
+          title: "Erro",
+          description: "Por favor, informe um valor válido",
+          variant: "destructive"
+        });
         return;
       }
       
-      // Preparar dados para salvar
-      const unitObj = units.find(u => u.id === newBilling.unit_id);
-      const unitDisplay = unitObj ? `${unitObj.block}${unitObj.number}` : newBilling.unit;
-      
-      const billingToCreate = {
-        unit: unitDisplay,
-        unit_id: newBilling.unit_id,
-        resident: newBilling.resident,
-        description: newBilling.description,
-        amount: amount,
-        dueDate: newBilling.dueDate,
-        status: newBilling.status,
-        isPrinted: false,
-        isSent: false
+      // Criar nova cobrança
+      const billingData = {
+        ...newBilling,
+        status: 'pending'
       };
       
-      // Salvar no banco de dados
-      const { error } = await supabase
-        .from('billings')
-        .insert([{
-          unit: unitDisplay,
-          unit_id: newBilling.unit_id,
-          resident: newBilling.resident,
-          description: newBilling.description,
-          amount: amount,
-          due_date: newBilling.dueDate,
-          status: newBilling.status,
-          is_printed: false,
-          is_sent: false
-        }]);
+      console.log("Dados da cobrança a ser criada:", billingData);
+      
+      try {
+        const createdBilling = await createBilling(billingData);
+        console.log("Cobrança criada com sucesso:", createdBilling);
         
-      if (error) throw error;
+        // Atualizar lista de cobranças
+        setExistingBillings(prev => [...prev, createdBilling]);
+        setFilteredBillings(prev => [...prev, createdBilling]);
+      } catch (createError) {
+        console.error("Erro ao usar createBilling:", createError);
+        console.log("Tentando criar cobrança diretamente no Supabase...");
+        
+        // Se createBilling falhar, tentar criar diretamente no Supabase
+        const unitObj = units.find(u => u.id === newBilling.unit_id);
+        const unitDisplay = unitObj ? `${unitObj.block}-${unitObj.number}` : newBilling.unit;
+        
+        const { data, error } = await supabase
+          .from('billings')
+          .insert([{
+            unit: unitDisplay,
+            unit_id: newBilling.unit_id,
+            resident: newBilling.resident,
+            description: newBilling.description,
+            amount: newBilling.amount,
+            due_date: newBilling.dueDate,
+            status: 'pending',
+            is_printed: false,
+            is_sent: false,
+            category: newBilling.category
+          }])
+          .select();
+          
+        if (error) throw error;
+        
+        console.log("Cobrança criada diretamente no Supabase:", data);
+        
+        if (data && data.length > 0) {
+          const newBillingFormatted = {
+            id: data[0].id,
+            unit: data[0].unit,
+            unit_id: data[0].unit_id,
+            resident: data[0].resident,
+            description: data[0].description,
+            amount: data[0].amount,
+            dueDate: data[0].due_date,
+            status: data[0].status,
+            isPrinted: data[0].is_printed,
+            isSent: data[0].is_sent
+          };
+          
+          // Atualizar lista de cobranças
+          setExistingBillings(prev => [...prev, newBillingFormatted]);
+          setFilteredBillings(prev => [...prev, newBillingFormatted]);
+        }
+      }
       
-      toast.success("Cobrança criada com sucesso!");
+      // Limpar formulário
+      setNewBilling({
+        unit: '',
+        unit_id: 0,
+        resident: '',
+        resident_id: 0,
+        description: '',
+        amount: 0,
+        dueDate: new Date().toISOString(),
+        category: 'taxa'
+      });
       
-      // Recarregar cobranças
-      const billings = await fetchBillings();
-      const relevantBillings = billings.filter(
-        billing => billing.status === 'pending' || billing.status === 'overdue'
-      );
-      setExistingBillings(relevantBillings);
-      setFilteredBillings(relevantBillings);
-      
-      // Fechar o diálogo
+      // Fechar modal
       setShowNewBillingDialog(false);
       
-      // Resetar o formulário
-      setNewBilling({
-        unit: "",
-        unit_id: null,
-        resident: "",
-        description: "",
-        amount: "",
-        dueDate: new Date().toISOString().split('T')[0],
-        status: "pending"
+      toast({
+        title: "Sucesso",
+        description: "Cobrança criada com sucesso!",
       });
     } catch (error) {
-      console.error("Erro ao criar cobrança:", error);
-      toast.error("Erro ao criar nova cobrança");
+      console.error("Erro ao criar nova cobrança:", error);
+      toast({
+        title: "Erro",
+        description: "Erro ao criar nova cobrança",
+        variant: "destructive"
+      });
     }
   };
   
-  // Formatar moeda
+  // Função para formatar valor monetário
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
@@ -282,10 +418,10 @@ const BillingGeneratorStep3 = ({
     }).format(value);
   };
   
-  // Formatar data
+  // Função para formatar data
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('pt-BR').format(date);
+    if (!dateString) return "";
+    return format(new Date(dateString), "dd/MM/yyyy", { locale: pt });
   };
 
   return (
@@ -549,7 +685,7 @@ const BillingGeneratorStep3 = ({
           </CardContent>
         </Card>
       </div>
-      
+
       <div className="space-y-2">
         <Label htmlFor="notes">Observações (opcional)</Label>
         <Textarea

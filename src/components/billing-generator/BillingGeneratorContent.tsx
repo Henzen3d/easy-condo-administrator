@@ -1,4 +1,3 @@
-
 import { useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -6,7 +5,6 @@ import { useToast } from "@/hooks/use-toast";
 import { BillingGeneratorSteps } from "./BillingGeneratorSteps";
 import BillingGeneratorStep1 from "./BillingGeneratorStep1";
 import BillingGeneratorConsumption from "./BillingGeneratorConsumption";
-import BillingGeneratorStep2 from "./BillingGeneratorStep2";
 import BillingGeneratorStep3 from "./BillingGeneratorStep3";
 import BillingGeneratorStep4 from "./BillingGeneratorStep4";
 import BillingGeneratorPDF from "./BillingGeneratorPDF";
@@ -15,20 +13,25 @@ import BillingGeneratorNavigation from "./BillingGeneratorNavigation";
 import { BillingData } from "@/hooks/use-billing-form";
 
 interface BillingGeneratorContentProps {
+  activeTab: string;
   activeStep: number;
   billingData: BillingData;
   updateBillingData: (data: Partial<BillingData>) => void;
   nextStep: () => void;
   prevStep: () => void;
+  resetStep: () => void;
   handleSubmit: () => void;
 }
 
+// Este componente não é mais necessário, pois o conteúdo das abas foi movido para BillingGeneratorTabs
 export const BillingGeneratorContent = ({
+  activeTab,
   activeStep,
   billingData,
   updateBillingData,
   nextStep,
   prevStep,
+  resetStep,
   handleSubmit
 }: BillingGeneratorContentProps) => {
   const { toast } = useToast();
@@ -65,71 +68,71 @@ export const BillingGeneratorContent = ({
     }
   }, [activeStep, billingData, updateBillingData]);
 
-  // Render the current step
-  const renderStep = () => {
-    switch (activeStep) {
-      case 1:
-        return (
+  // Este componente não renderiza mais nada, pois o conteúdo foi movido para BillingGeneratorTabs
+  return null;
+};
+
+export const BillingGeneratorTabContent = ({
+  activeStep,
+  billingData,
+  updateBillingData,
+  nextStep,
+  prevStep,
+  resetStep,
+  handleSubmit
+}: Omit<BillingGeneratorContentProps, 'activeTab'>) => {
+  return (
+    <div className="space-y-6">
+      {/* Exibir os passos numerados */}
+      <BillingGeneratorSteps activeStep={activeStep} />
+      
+      {/* Conteúdo do passo atual */}
+      <div className="bg-white rounded-lg shadow-sm border p-6">
+        {activeStep === 1 && (
           <BillingGeneratorStep1 
-            billingData={billingData} 
-            updateBillingData={updateBillingData} 
-          />
-        );
-      case 2:
-        return (
-          <BillingGeneratorConsumption
             billingData={billingData}
             updateBillingData={updateBillingData}
+            nextStep={nextStep}
           />
-        );
-      case 3:
-        return (
-          <BillingGeneratorStep2 
-            billingData={billingData} 
-            updateBillingData={updateBillingData} 
+        )}
+        
+        {activeStep === 2 && (
+          <BillingGeneratorConsumption 
+            billingData={billingData}
+            updateBillingData={updateBillingData}
+            nextStep={nextStep}
           />
-        );
-      case 4:
-        return (
+        )}
+        
+        {activeStep === 3 && (
           <BillingGeneratorStep3 
-            billingData={billingData} 
-            updateBillingData={updateBillingData} 
+            billingData={billingData}
+            updateBillingData={updateBillingData}
+            nextStep={nextStep}
+            prevStep={prevStep}
           />
-        );
-      case 5:
-        return (
+        )}
+        
+        {activeStep === 4 && (
           <BillingGeneratorStep4 
-            billingData={billingData} 
+            billingData={billingData}
+            updateBillingData={updateBillingData}
+            prevStep={prevStep}
+            resetStep={resetStep}
+            handleSubmit={handleSubmit}
           />
-        );
-      case 6:
-        return (
-          <BillingGeneratorPDF 
-            billingData={billingData} 
-          />
-        );
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        {/* Progress indicators */}
-        <BillingGeneratorSteps activeStep={activeStep} />
-
-        {/* Current step content */}
-        {renderStep()}
-
-        {/* Navigation buttons */}
-        <BillingGeneratorNavigation 
-          activeStep={activeStep} 
-          prevStep={prevStep} 
-          nextStep={nextStep} 
-          handleSubmit={handleSubmit} 
+        )}
+      </div>
+      
+      {/* Botões de navegação - Remover para o passo 2, pois o componente BillingGeneratorConsumption já tem seu próprio botão */}
+      {activeStep !== 2 && (
+        <BillingGeneratorNavigation
+          activeStep={activeStep}
+          nextStep={nextStep}
+          prevStep={prevStep}
+          handleSubmit={handleSubmit}
         />
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 };

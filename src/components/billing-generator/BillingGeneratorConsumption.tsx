@@ -44,10 +44,12 @@ interface ConsumptionData {
 
 export default function BillingGeneratorConsumption({ 
   billingData,
-  updateBillingData
+  updateBillingData,
+  nextStep
 }: { 
   billingData: any; 
   updateBillingData: (data: any) => void;
+  nextStep?: () => void;
 }) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -74,6 +76,7 @@ export default function BillingGeneratorConsumption({
     end_date: billingData.statementPeriod?.endDate || ""
   });
 
+  // Efeito para atualizar o período quando o mês/ano de referência mudar
   useEffect(() => {
     if (billingData.reference?.month !== undefined && billingData.reference?.year !== undefined) {
       const year = billingData.reference.year;
@@ -93,72 +96,42 @@ export default function BillingGeneratorConsumption({
       };
       
       // Só atualiza se as datas não tiverem sido definidas manualmente
-      if (!period.start_date || !period.end_date || 
-          (billingData.periodAutoSet && !billingData.periodManuallyEdited)) {
-        const newPeriod = {
-          start_date: formatDate(firstDay),
-          end_date: formatDate(lastDay)
-        };
+      if (!billingData.periodManuallyEdited) {
+        const startDate = formatDate(firstDay);
+        const endDate = formatDate(lastDay);
         
-        setPeriod(newPeriod);
+        setPeriod({
+          start_date: startDate,
+          end_date: endDate
+        });
         
-        // Atualiza o billingData
+        // Marcar que o período foi definido automaticamente
         updateBillingData({
-          statementPeriod: {
-            startDate: newPeriod.start_date,
-            endDate: newPeriod.end_date
-          },
           periodAutoSet: true
         });
       }
     }
-  }, [billingData.reference?.month, billingData.reference?.year]);
+  }, [billingData.reference, billingData.periodManuallyEdited]);
 
+  // Efeito para carregar unidades e taxas quando o componente montar
   useEffect(() => {
     loadUnits();
     loadUtilityRates();
   }, []);
 
+  // Efeito para recalcular o consumo quando o contador de atualização mudar
   useEffect(() => {
-    if (units.length > 0 && (gasRate || waterRate)) {
+    if (refreshCounter > 0) {
       calculateConsumption();
     }
-  }, [units, gasRate, waterRate, period.start_date, period.end_date]);
+  }, [refreshCounter]);
 
+  // Efeito para calcular o consumo inicial quando as unidades e taxas forem carregadas
   useEffect(() => {
-    // Update parent component with consumption data
-    if (billingData.includeGasConsumption && gasConsumptionData.length > 0) {
-      const gasChargeItems = gasConsumptionData
-        .filter(item => item.consumption !== null && item.total !== null)
-        .map(item => ({
-          id: `gas-${item.unit_id}`,
-          description: `Consumo de Gás - Unidade ${item.unit_name}`,
-          value: item.total,
-          unit: item.unit_id.toString(),
-          category: "consumo"
-        }));
-      
-      updateBillingData({
-        gasConsumptionItems: gasChargeItems
-      });
+    if (units.length > 0 && (gasRate || waterRate) && !refreshCounter) {
+      calculateConsumption();
     }
-
-    if (billingData.includeWaterConsumption && waterConsumptionData.length > 0) {
-      const waterChargeItems = waterConsumptionData
-        .filter(item => item.consumption !== null && item.total !== null)
-        .map(item => ({
-          id: `water-${item.unit_id}`,
-          description: `Consumo de Água - Unidade ${item.unit_name}`,
-          value: item.total,
-          unit: item.unit_id.toString(),
-          category: "consumo"
-        }));
-      
-      updateBillingData({
-        waterConsumptionItems: waterChargeItems
-      });
-    }
-  }, [billingData.includeGasConsumption, billingData.includeWaterConsumption, gasConsumptionData, waterConsumptionData]);
+  }, [units, gasRate, waterRate]);
 
   const loadUnits = async () => {
     try {
@@ -447,12 +420,44 @@ export default function BillingGeneratorConsumption({
       setGasConsumptionData(gasResults);
       setWaterConsumptionData(waterResults);
 
-      // Update parent component's period
+      // Gerar itens de cobrança baseados no consumo
+      const gasChargeItems = gasResults
+        .filter(item => item.consumption !== null && item.total !== null && item.total > 0)
+        .map(item => ({
+          id: `gas-${item.unit_id}`,
+          description: `Consumo de Gás - Unidade ${item.unit_name}`,
+          value: item.total,
+          unit: item.unit_id.toString(),
+          category: "consumo"
+        }));
+        
+      const waterChargeItems = waterResults
+        .filter(item => item.consumption !== null && item.total !== null && item.total > 0)
+        .map(item => ({
+          id: `water-${item.unit_id}`,
+          description: `Consumo de Água - Unidade ${item.unit_name}`,
+          value: item.total,
+          unit: item.unit_id.toString(),
+          category: "consumo"
+        }));
+
+      // Update parent component's data
       updateBillingData({
         statementPeriod: {
           startDate: period.start_date,
           endDate: period.end_date
-        }
+        },
+        consumptionPeriod: period,
+        gasConsumptionData: gasResults,
+        waterConsumptionData: waterResults,
+        gasConsumptionItems: gasChargeItems,
+        waterConsumptionItems: waterChargeItems
+      });
+
+      // Exibir mensagem de sucesso
+      toast({
+        title: "Consumo calculado com sucesso",
+        description: `Foram calculados ${gasChargeItems.length} consumos de gás e ${waterChargeItems.length} consumos de água.`,
       });
 
     } catch (error) {
@@ -586,8 +591,8 @@ export default function BillingGeneratorConsumption({
 
       if (editingReading.readingId) {
         // Atualizar leitura existente
-        const { error } = await supabase
-          .from('meter_readings')
+      const { error } = await supabase
+        .from('meter_readings')
           .update({
             reading_value: readingValue,
             updated_at: new Date().toISOString()
@@ -632,10 +637,10 @@ export default function BillingGeneratorConsumption({
           console.log("Nova leitura inserida com ID:", readingId);
         }
 
-        toast({
-          title: "Leitura salva com sucesso",
+      toast({
+        title: "Leitura salva com sucesso",
           description: "A leitura foi registrada e será usada para os cálculos."
-        });
+      });
       }
 
       // Limpar o cache para forçar a recarga dos dados
@@ -674,13 +679,35 @@ export default function BillingGeneratorConsumption({
     setEditingReading(null);
   };
 
-  // Adicionar useEffect para recalcular o consumo quando o contador de atualização mudar
-  useEffect(() => {
-    if (refreshCounter > 0) {
-      console.log(`Atualizando dados devido ao refreshCounter: ${refreshCounter}`);
-      calculateConsumption();
+  // Função para avançar para o próximo passo
+  const handleNextStep = () => {
+    // Verificar se há dados de consumo
+    const hasGasConsumption = billingData.includeGasConsumption && gasConsumptionData.some(item => item.consumption !== null && item.total !== null);
+    const hasWaterConsumption = billingData.includeWaterConsumption && waterConsumptionData.some(item => item.consumption !== null && item.total !== null);
+    
+    // Se não houver dados de consumo, exibir um aviso
+    if (!hasGasConsumption && !hasWaterConsumption) {
+      toast({
+        title: "Nenhum consumo calculado",
+        description: "Calcule o consumo antes de avançar para o próximo passo.",
+      });
+      return;
     }
-  }, [refreshCounter]);
+    
+    // Atualizar o billingData com as informações de consumo
+    updateBillingData({
+      gasConsumptionData: gasConsumptionData,
+      waterConsumptionData: waterConsumptionData,
+      includeGasConsumption: billingData.includeGasConsumption,
+      includeWaterConsumption: billingData.includeWaterConsumption,
+      consumptionPeriod: period
+    });
+    
+    // Avançar para o próximo passo
+    if (nextStep) {
+      nextStep();
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -1150,6 +1177,16 @@ export default function BillingGeneratorConsumption({
           </span>
         </div>
       )}
+
+      {/* Botão para avançar para o próximo passo */}
+      <div className="mt-6 flex justify-end">
+        <Button 
+          onClick={handleNextStep} 
+          disabled={loading}
+        >
+          Avançar
+        </Button>
+      </div>
     </div>
   );
 }

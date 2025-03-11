@@ -1,15 +1,33 @@
-
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { FileText, ClipboardList, CreditCard, Settings } from "lucide-react";
+import BillingGeneratorHistory from "./BillingGeneratorHistory";
+import BillingGeneratorCharges from "./BillingGeneratorCharges";
+import BillingGeneratorSettings from "./BillingGeneratorSettings";
+import { BillingGeneratorTabContent } from "./BillingGeneratorContent";
+import { BillingData } from "@/hooks/use-billing-form";
 
 interface BillingGeneratorTabsProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  activeStep: number;
+  billingData: BillingData;
+  updateBillingData: (data: Partial<BillingData>) => void;
+  nextStep: () => void;
+  prevStep: () => void;
+  resetStep: () => void;
+  handleSubmit: () => void;
 }
 
 const BillingGeneratorTabs = ({ 
   activeTab, 
-  setActiveTab 
+  setActiveTab,
+  activeStep,
+  billingData,
+  updateBillingData,
+  nextStep,
+  prevStep,
+  resetStep,
+  handleSubmit
 }: BillingGeneratorTabsProps) => {
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -31,6 +49,30 @@ const BillingGeneratorTabs = ({
           <span className="hidden sm:inline">Configurações de Pagamento</span>
         </TabsTrigger>
       </TabsList>
+
+      <TabsContent value="generator" className="mt-6">
+        <BillingGeneratorTabContent 
+          activeStep={activeStep}
+          billingData={billingData}
+          updateBillingData={updateBillingData}
+          nextStep={nextStep}
+          prevStep={prevStep}
+          resetStep={resetStep}
+          handleSubmit={handleSubmit}
+        />
+      </TabsContent>
+      
+      <TabsContent value="history" className="mt-6">
+        <BillingGeneratorHistory />
+      </TabsContent>
+      
+      <TabsContent value="charges" className="mt-6">
+        <BillingGeneratorCharges />
+      </TabsContent>
+      
+      <TabsContent value="settings" className="mt-6">
+        <BillingGeneratorSettings />
+      </TabsContent>
     </Tabs>
   );
 };

@@ -1,14 +1,11 @@
-
 import { ReactNode } from "react";
 
 // Define the steps of the billing generator process
 export const STEPS = [
-  { id: 1, name: "Geral" },
+  { id: 1, name: "Informações Gerais" },
   { id: 2, name: "Consumo" },
   { id: 3, name: "Itens de Cobrança" },
-  { id: 4, name: "Configurações dos Boletos" },
-  { id: 5, name: "Resumo do Faturamento" },
-  { id: 6, name: "Gerar Faturas" },
+  { id: 4, name: "Gerar Faturas" }
 ];
 
 interface BillingGeneratorStepsProps {
@@ -20,19 +17,21 @@ export const BillingGeneratorSteps = ({ activeStep }: BillingGeneratorStepsProps
     <div className="mb-6">
       <div className="flex justify-between mb-2">
         {STEPS.map((step) => (
-          <div 
+          <div
             key={step.id}
-            className={`flex flex-col items-center flex-1 ${step.id < activeStep 
-              ? 'text-primary' 
-              : step.id === activeStep 
-                ? 'text-primary font-bold' 
-                : 'text-muted-foreground'}`}
+            className={`flex flex-col items-center flex-1 ${
+              step.id < activeStep
+                ? 'text-primary'
+                : step.id === activeStep 
+                  ? 'text-primary font-bold'
+                  : 'text-muted-foreground'
+            }`}
           >
             <div className={`rounded-full w-8 h-8 flex items-center justify-center mb-2 ${
-              step.id < activeStep 
-                ? 'bg-primary text-white' 
-                : step.id === activeStep 
-                  ? 'border-2 border-primary text-primary' 
+              step.id < activeStep
+                ? 'bg-primary text-white'
+                : step.id === activeStep
+                  ? 'border-2 border-primary text-primary'
                   : 'border border-muted-foreground text-muted-foreground'
             }`}>
               {step.id}
@@ -42,7 +41,7 @@ export const BillingGeneratorSteps = ({ activeStep }: BillingGeneratorStepsProps
         ))}
       </div>
       <div className="relative flex h-1 bg-muted">
-        <div 
+        <div
           className="absolute bg-primary h-1 transition-all duration-300"
           style={{ width: `${((activeStep - 1) / (STEPS.length - 1)) * 100}%` }}
         ></div>

@@ -1,6 +1,5 @@
-
 import { Button } from "@/components/ui/button";
-import { ArrowRight, ArrowLeft, Check } from "lucide-react";
+import { ArrowRight, ArrowLeft, Check, RotateCcw } from "lucide-react";
 
 interface BillingGeneratorNavigationProps {
   activeStep: number;
@@ -23,22 +22,22 @@ const BillingGeneratorNavigation = ({
           Voltar
         </Button>
       ) : (
-        <div></div> // Empty div to maintain space
+        <div></div> // Espaço vazio para manter o layout
       )}
       
-      {activeStep < 5 ? (
+      {activeStep < 4 ? (
         <Button onClick={nextStep}>
           Avançar
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
-      ) : activeStep === 5 ? (
-        <Button onClick={handleSubmit}>
+      ) : activeStep === 4 ? (
+        <Button onClick={handleSubmit} className="bg-green-600 hover:bg-green-700">
           <Check className="mr-2 h-4 w-4" />
-          Confirmar
+          Gerar Faturas
         </Button>
       ) : (
-        <Button variant="outline" onClick={() => alert("Este botão precisa ser ligado à função que reinicia o processo")}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
+        <Button variant="outline" onClick={() => window.location.reload()}>
+          <RotateCcw className="mr-2 h-4 w-4" />
           Voltar ao Início
         </Button>
       )}

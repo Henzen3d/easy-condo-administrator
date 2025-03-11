@@ -1,0 +1,769 @@
+import { useState, useEffect } from "react";
+import { CalendarIcon, CheckCircle2, Droplet, Flame, Download, FileText, Archive } from "lucide-react";
+import { format } from "date-fns";
+import { pt } from 'date-fns/locale';
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { generateBillingsSummaryPDF } from "@/lib/pdfService";
+import { markBillingAsPrinted } from "@/lib/billingService";
+import { createInvoice } from "@/lib/invoiceService";
+import { supabase } from "@/integrations/supabase/client";
+import { BillingData } from "@/hooks/use-billing-form";
+import JSZip from "jszip";
+import { prepareInvoiceData, generateInvoicePDF } from "@/utils/pdf/generators";
+import { hasBankAccountWithPix } from "@/lib/pixService";
+
+interface BillingGeneratorStep4Props {
+  billingData: BillingData;
+  updateBillingData: (data: Partial<BillingData>) => void;
+  prevStep: () => void;
+  resetStep: () => void;
+  handleSubmit: () => void;
+}
+
+// Mock data for units
+const mockUnits = [
+  { id: 1, number: "101", block: "A" },
+  { id: 2, number: "102", block: "A" },
+  { id: 3, number: "201", block: "A" },
+  { id: 4, number: "202", block: "A" },
+  { id: 5, number: "101", block: "B" },
+  { id: 6, number: "102", block: "B" },
+];
+
+// Mock categories for charges
+const chargeCategories = [
+  { id: "taxa", name: "Taxa Regular" },
+  { id: "extra", name: "Taxa Extra" },
+  { id: "multa", name: "Multa" },
+  { id: "consumo", name: "Consumo" },
+  { id: "outros", name: "Outros" },
+];
+
+const getMonthName = (month: number) => {
+  const months = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+  return months[month - 1]; // Ajuste para índice baseado em 1
+};
+
+const BillingGeneratorStep4 = ({ 
+  billingData, 
+  updateBillingData,
+  prevStep,
+  resetStep,
+  handleSubmit 
+}: BillingGeneratorStep4Props) => {
+  const { toast } = useToast();
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isGeneratingZip, setIsGeneratingZip] = useState(false);
+  const [units, setUnits] = useState<any[]>([]);
+  const [generatedInvoices, setGeneratedInvoices] = useState<Record<string, boolean>>({});
+  const [hasPixAccount, setHasPixAccount] = useState(false);
+  
+  // Carregar unidades do banco de dados e verificar se há conta com PIX
+  useEffect(() => {
+    async function loadData() {
+      try {
+        // Carregar unidades
+        const { data, error } = await supabase
+          .from('units')
+          .select('*')
+          .order('block')
+          .order('number');
+
+        if (error) throw error;
+        setUnits(data || []);
+        
+        // Verificar se há conta com PIX
+        const hasPix = await hasBankAccountWithPix();
+        setHasPixAccount(hasPix);
+        
+        if (!hasPix) {
+          toast({
+            title: "Aviso",
+            description: "Não há conta bancária com chave PIX configurada. Os QR codes PIX não serão gerados."
+          });
+        }
+      } catch (error) {
+        console.error("Erro ao carregar dados:", error);
+      }
+    }
+
+    loadData();
+  }, [toast]);
+  
+  // Calcular o total das cobranças
+  const totalAmount = billingData.chargeItems?.reduce(
+    (sum, item) => sum + (item.value || 0), 
+    0
+  ) || 0;
+  
+  // Função para gerar uma fatura individual
+  const generateInvoiceForUnit = async (unit: any) => {
+    try {
+      // Verificar se a fatura já foi gerada para esta unidade
+      const unitKey = `${unit.block}-${unit.number}`;
+      if (generatedInvoices[unitKey]) {
+        toast({
+          title: "Informação",
+          description: `A fatura para a unidade ${unitKey} já foi gerada.`
+        });
+        return;
+      }
+
+      setIsGeneratingPDF(true);
+      
+      console.log(`Processando unidade ${unitKey} para geração de fatura individual`);
+      console.log("Dados de cobrança disponíveis:", billingData.chargeItems);
+      
+      // Filtrar os itens de cobrança para esta unidade
+      const unitItems = billingData.chargeItems.filter(item => {
+        console.log(`Verificando item para unidade ${unitKey}:`, item);
+        // Verificar se o item é para todas as unidades ou para esta unidade específica
+        return (
+          (item.unit === "all" || item.unit === "todas" || 
+           item.unit === unit.id.toString() || 
+           item.unit === unit.id || 
+           item.unit_id === unit.id)
+        );
+      });
+      
+      console.log(`Itens de cobrança filtrados para unidade ${unitKey}:`, unitItems);
+
+      // Adicionar itens de consumo de gás se habilitado
+      if (billingData.includeGasConsumption && billingData.gasConsumptionItems) {
+        console.log("Verificando itens de consumo de gás:", billingData.gasConsumptionItems);
+        const gasItems = billingData.gasConsumptionItems.filter(item => 
+          item.unit === unit.id.toString() || 
+          item.unit === unit.id || 
+          item.unit_id === unit.id
+        );
+        console.log(`Itens de consumo de gás para unidade ${unitKey}:`, gasItems);
+        unitItems.push(...gasItems);
+      }
+
+      // Adicionar itens de consumo de água se habilitado
+      if (billingData.includeWaterConsumption && billingData.waterConsumptionItems) {
+        console.log("Verificando itens de consumo de água:", billingData.waterConsumptionItems);
+        const waterItems = billingData.waterConsumptionItems.filter(item => 
+          item.unit === unit.id.toString() || 
+          item.unit === unit.id || 
+          item.unit_id === unit.id
+        );
+        console.log(`Itens de consumo de água para unidade ${unitKey}:`, waterItems);
+        unitItems.push(...waterItems);
+      }
+
+      // Se não houver itens para esta unidade, não gerar fatura
+      if (unitItems.length === 0) {
+        console.log(`Nenhum item de cobrança encontrado para a unidade ${unitKey}`);
+        
+        // Verificar se há cobranças gerais que deveriam ser aplicadas a todas as unidades
+        if (billingData.chargeItems.some(item => item.unit === "all" || item.unit === "todas")) {
+          console.log("Existem cobranças gerais, mas não foram aplicadas a esta unidade");
+        }
+        
+        toast({
+          title: "Informação",
+          description: `Não há itens de cobrança para a unidade ${unitKey}.`
+        });
+        setIsGeneratingPDF(false);
+        return;
+      }
+
+      console.log(`Total de ${unitItems.length} itens de cobrança para unidade ${unitKey}:`, unitItems);
+
+      // Calcular o total para esta unidade
+      const unitTotal = unitItems.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
+      console.log(`Total calculado para unidade ${unitKey}: ${unitTotal}`);
+
+      // Filtrar apenas os IDs válidos e convertê-los para números
+      const validItemIds = unitItems
+        .filter(item => {
+          const isValid = item.id && !isNaN(parseInt(item.id));
+          if (!isValid) {
+            console.log(`Item com ID inválido:`, item);
+          }
+          return isValid;
+        })
+        .map(item => parseInt(item.id));
+      
+      console.log(`IDs válidos para unidade ${unitKey}:`, validItemIds);
+      
+      // Verificar se há IDs válidos
+      if (validItemIds.length === 0) {
+        console.log(`Não há itens de cobrança com IDs válidos para a unidade ${unitKey}`);
+        
+        // Se não houver IDs válidos, mas houver itens, criar cobranças no banco de dados
+        if (unitItems.length > 0) {
+          console.log(`Tentando criar cobranças no banco de dados para unidade ${unitKey}`);
+          
+          const createdItemIds = [];
+          
+          for (const item of unitItems) {
+            try {
+              // Criar cobrança no banco de dados
+              const { data, error } = await supabase
+                .from('billings')
+                .insert([{
+                  unit: unitKey,
+                  unit_id: unit.id,
+                  resident: unit.owner || "Proprietário",
+                  description: item.description,
+                  amount: parseFloat(item.value) || 0,
+                  due_date: billingData.dueDate,
+                  status: 'pending',
+                  is_printed: false,
+                  is_sent: false,
+                  category: item.category || 'taxa'
+                }])
+                .select();
+                
+                if (error) {
+                  console.error(`Erro ao criar cobrança para unidade ${unitKey}:`, error);
+                  continue;
+                }
+                
+                if (data && data.length > 0) {
+                  console.log(`Cobrança criada com sucesso para unidade ${unitKey}:`, data[0]);
+                  createdItemIds.push(data[0].id);
+                }
+              } catch (itemError) {
+                console.error(`Erro ao criar cobrança para unidade ${unitKey}:`, itemError);
+              }
+            }
+            
+            if (createdItemIds.length > 0) {
+              console.log(`${createdItemIds.length} cobranças criadas com sucesso para unidade ${unitKey}`);
+              validItemIds.push(...createdItemIds);
+            } else {
+              throw new Error(`Não foi possível criar cobranças para a unidade ${unitKey}`);
+            }
+          }
+        } else {
+          throw new Error(`Não há itens de cobrança válidos para a unidade ${unitKey}`);
+        }
+      }
+
+      // Criar a fatura no banco de dados
+      console.log(`Criando fatura no banco de dados para unidade ${unitKey} com IDs:`, validItemIds);
+      const invoice = await createInvoice(
+        unit.id,
+        unitKey,
+        unit.owner || "Proprietário",
+        billingData.dueDate,
+        validItemIds,
+        billingData.reference.month,
+        billingData.reference.year,
+        billingData.notes
+      );
+
+      if (!invoice) {
+        throw new Error(`Falha ao criar a fatura no banco de dados para a unidade ${unitKey}`);
+      }
+
+      console.log(`Fatura criada com sucesso para unidade ${unitKey}:`, invoice);
+
+      // Preparar os dados da fatura
+      const invoiceData = prepareInvoiceData({
+        ...billingData,
+        chargeItems: unitItems,
+        resident: unit.owner || "Proprietário"
+      }, unit);
+      
+      console.log(`Dados da fatura preparados para unidade ${unitKey}:`, invoiceData);
+      
+      try {
+        // Gerar o PDF da fatura
+        const pdfBlob = await generateInvoicePDF(invoiceData);
+        console.log(`PDF gerado com sucesso para unidade ${unitKey}, tamanho: ${pdfBlob.size} bytes`);
+        
+        if (!pdfBlob || pdfBlob.size === 0) {
+          throw new Error(`PDF gerado está vazio para unidade ${unitKey}`);
+        }
+        
+        // Criar URL para download
+        const url = URL.createObjectURL(pdfBlob);
+        
+        // Criar link para download
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `fatura_${unit.block}-${unit.number}_${billingData.reference.month}_${billingData.reference.year}.pdf`;
+        document.body.appendChild(link); // Adicionar o link ao DOM
+        link.click();
+        
+        // Pequeno atraso antes de remover o link e revogar a URL
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        }, 100);
+        
+        // Marcar a fatura como gerada
+        setGeneratedInvoices(prev => ({
+          ...prev,
+          [unitKey]: true
+        }));
+        
+        // Marcar as cobranças como impressas
+        for (const item of unitItems) {
+          if (item.id) {
+            await markBillingAsPrinted(item.id);
+          }
+        }
+        
+        toast({
+          title: "Sucesso",
+          description: `Fatura para a unidade ${unitKey} gerada com sucesso!`
+        });
+      } catch (pdfError) {
+        console.error(`Erro ao gerar o PDF para unidade ${unitKey}:`, pdfError);
+        throw new Error(`Erro ao gerar o PDF: ${pdfError.message}`);
+      }
+    } catch (error) {
+      console.error(`Erro ao gerar fatura para a unidade ${unit.block}-${unit.number}:`, error);
+      toast({
+        title: "Erro",
+        description: `Erro ao gerar fatura para a unidade ${unit.block}-${unit.number}: ${error.message}`,
+        variant: "destructive"
+      });
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
+
+  // Função para gerar todas as faturas
+  const generateAllInvoices = async () => {
+    try {
+      setIsGeneratingZip(true);
+      
+      // Criar um objeto ZIP para armazenar todos os PDFs
+      const zip = new JSZip();
+      let successCount = 0;
+      let errorCount = 0;
+      
+      console.log("Iniciando geração de todas as faturas");
+      console.log("Dados de cobrança disponíveis:", billingData.chargeItems);
+      
+      // Verificar se há itens de cobrança
+      if (!billingData.chargeItems || billingData.chargeItems.length === 0) {
+        console.log("Nenhum item de cobrança encontrado nos dados");
+        throw new Error("Não há itens de cobrança para gerar faturas");
+      }
+      
+      // Verificar se há cobranças gerais (para todas as unidades)
+      const hasGeneralCharges = billingData.chargeItems.some(item => 
+        item.unit === "all" || item.unit === "todas"
+      );
+      
+      console.log(`Cobranças gerais encontradas: ${hasGeneralCharges}`);
+      
+      // Gerar faturas para cada unidade
+      for (const unit of units) {
+        try {
+          const unitKey = `${unit.block}-${unit.number}`;
+          console.log(`Processando unidade: ${unitKey}`);
+          
+          // Filtrar os itens de cobrança para esta unidade
+          const unitItems = billingData.chargeItems.filter(item => {
+            console.log(`Verificando item para unidade ${unitKey}:`, item);
+            // Verificar se o item é para todas as unidades ou para esta unidade específica
+            return (
+              (item.unit === "all" || item.unit === "todas" || 
+               item.unit === unit.id.toString() || 
+               item.unit === unit.id || 
+               item.unit_id === unit.id)
+            );
+          });
+          
+          console.log(`Itens de cobrança filtrados para unidade ${unitKey}:`, unitItems);
+
+          // Adicionar itens de consumo de gás se habilitado
+          if (billingData.includeGasConsumption && billingData.gasConsumptionItems) {
+            console.log("Verificando itens de consumo de gás:", billingData.gasConsumptionItems);
+            const gasItems = billingData.gasConsumptionItems.filter(item => 
+              item.unit === unit.id.toString() || 
+              item.unit === unit.id || 
+              item.unit_id === unit.id
+            );
+            console.log(`Itens de consumo de gás para unidade ${unitKey}:`, gasItems);
+            unitItems.push(...gasItems);
+          }
+
+          // Adicionar itens de consumo de água se habilitado
+          if (billingData.includeWaterConsumption && billingData.waterConsumptionItems) {
+            console.log("Verificando itens de consumo de água:", billingData.waterConsumptionItems);
+            const waterItems = billingData.waterConsumptionItems.filter(item => 
+              item.unit === unit.id.toString() || 
+              item.unit === unit.id || 
+              item.unit_id === unit.id
+            );
+            console.log(`Itens de consumo de água para unidade ${unitKey}:`, waterItems);
+            unitItems.push(...waterItems);
+          }
+
+          // Se não houver itens para esta unidade, pular
+          if (unitItems.length === 0) {
+            console.log(`Nenhum item de cobrança para a unidade ${unitKey}, pulando...`);
+            
+            // Se houver cobranças gerais, mas nenhuma foi aplicada a esta unidade, isso é um erro
+            if (hasGeneralCharges) {
+              console.log(`AVISO: Existem cobranças gerais, mas não foram aplicadas à unidade ${unitKey}`);
+            }
+            
+            continue;
+          }
+
+          console.log(`Total de ${unitItems.length} itens de cobrança para unidade ${unitKey}:`, unitItems);
+
+          // Calcular o total para esta unidade
+          const unitTotal = unitItems.reduce((sum, item) => sum + (parseFloat(item.value) || 0), 0);
+          console.log(`Total calculado para unidade ${unitKey}: ${unitTotal}`);
+
+          // Filtrar apenas os IDs válidos e convertê-los para números
+          const validItemIds = unitItems
+            .filter(item => {
+              const isValid = item.id && !isNaN(parseInt(item.id));
+              if (!isValid) {
+                console.log(`Item com ID inválido:`, item);
+              }
+              return isValid;
+            })
+            .map(item => parseInt(item.id));
+          
+          console.log(`IDs válidos para unidade ${unitKey}:`, validItemIds);
+          
+          // Se não houver IDs válidos, pular esta unidade ou criar cobranças
+          if (validItemIds.length === 0) {
+            console.log(`Não há itens de cobrança com IDs válidos para a unidade ${unitKey}`);
+            
+            // Se não houver IDs válidos, mas houver itens, criar cobranças no banco de dados
+            if (unitItems.length > 0) {
+              console.log(`Tentando criar cobranças no banco de dados para unidade ${unitKey}`);
+              
+              const createdItemIds = [];
+              
+              for (const item of unitItems) {
+                try {
+                  // Criar cobrança no banco de dados
+                  const { data, error } = await supabase
+                    .from('billings')
+                    .insert([{
+                      unit: unitKey,
+                      unit_id: unit.id,
+                      resident: unit.owner || "Proprietário",
+                      description: item.description,
+                      amount: parseFloat(item.value) || 0,
+                      due_date: billingData.dueDate,
+                      status: 'pending',
+                      is_printed: false,
+                      is_sent: false,
+                      category: item.category || 'taxa'
+                    }])
+                    .select();
+                    
+                    if (error) {
+                      console.error(`Erro ao criar cobrança para unidade ${unitKey}:`, error);
+                      continue;
+                    }
+                    
+                    if (data && data.length > 0) {
+                      console.log(`Cobrança criada com sucesso para unidade ${unitKey}:`, data[0]);
+                      createdItemIds.push(data[0].id);
+                    }
+                  } catch (itemError) {
+                    console.error(`Erro ao criar cobrança para unidade ${unitKey}:`, itemError);
+                  }
+                }
+                
+                if (createdItemIds.length > 0) {
+                  console.log(`${createdItemIds.length} cobranças criadas com sucesso para unidade ${unitKey}`);
+                  validItemIds.push(...createdItemIds);
+                } else {
+                  console.warn(`Não foi possível criar cobranças para a unidade ${unitKey}, pulando...`);
+                  continue;
+                }
+              }
+            } else {
+              console.warn(`Não há itens de cobrança válidos para a unidade ${unitKey}, pulando...`);
+              continue;
+            }
+          }
+
+          // Criar a fatura no banco de dados
+          console.log(`Criando fatura no banco de dados para unidade ${unitKey} com IDs:`, validItemIds);
+          const invoice = await createInvoice(
+            unit.id,
+            unitKey,
+            unit.owner || "Proprietário",
+            billingData.dueDate,
+            validItemIds,
+            billingData.reference.month,
+            billingData.reference.year,
+            billingData.notes
+          );
+
+          if (!invoice) {
+            throw new Error(`Falha ao criar a fatura no banco de dados para a unidade ${unitKey}`);
+          }
+
+          console.log(`Fatura criada com sucesso para unidade ${unitKey}:`, invoice);
+
+          // Preparar os dados da fatura
+          const invoiceData = prepareInvoiceData({
+            ...billingData,
+            chargeItems: unitItems,
+            resident: unit.owner || "Proprietário"
+          }, unit);
+          
+          // Gerar o PDF da fatura
+          const pdfBlob = await generateInvoicePDF(invoiceData);
+          
+          if (!pdfBlob || pdfBlob.size === 0) {
+            throw new Error(`PDF gerado está vazio para a unidade ${unitKey}`);
+          }
+          
+          console.log(`PDF gerado com sucesso para a unidade ${unitKey}, tamanho: ${pdfBlob.size} bytes`);
+          
+          // Nome do arquivo no ZIP
+          const fileName = `fatura_${unitKey}_${billingData.reference.month}_${billingData.reference.year}.pdf`;
+          
+          // Adicionar o PDF ao ZIP
+          zip.file(fileName, pdfBlob);
+          
+          // Marcar a fatura como gerada
+          setGeneratedInvoices(prev => ({
+            ...prev,
+            [unitKey]: true
+          }));
+          
+          // Marcar as cobranças como impressas
+          for (const item of unitItems) {
+            if (item.id) {
+              await markBillingAsPrinted(item.id);
+            }
+          }
+          
+          successCount++;
+        } catch (unitError) {
+          console.error(`Erro ao processar a unidade ${unit.block}-${unit.number}:`, unitError);
+          errorCount++;
+          // Continuar com as próximas unidades mesmo se houver erro
+        }
+      }
+      
+      // Verificar se alguma fatura foi gerada com sucesso
+      if (successCount === 0) {
+        throw new Error("Nenhuma fatura foi gerada com sucesso");
+      }
+      
+      console.log(`Gerando arquivo ZIP com ${successCount} faturas`);
+      
+      // Gerar o arquivo ZIP
+      const zipBlob = await zip.generateAsync({ 
+        type: "blob",
+        compression: "DEFLATE",
+        compressionOptions: {
+          level: 6
+        }
+      });
+      
+      console.log(`Arquivo ZIP gerado com sucesso, tamanho: ${zipBlob.size} bytes`);
+      
+      if (!zipBlob || zipBlob.size === 0) {
+        throw new Error("Arquivo ZIP gerado está vazio");
+      }
+      
+      // Criar URL para download
+      const url = URL.createObjectURL(zipBlob);
+      
+      // Criar link para download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `faturas_${billingData.reference.month}_${billingData.reference.year}.zip`;
+      document.body.appendChild(link); // Adicionar o link ao DOM
+      link.click();
+      
+      // Pequeno atraso antes de remover o link e revogar a URL
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
+      
+      // Exibir mensagem de sucesso
+      toast({
+        title: "Sucesso",
+        description: `${successCount} faturas geradas com sucesso${errorCount > 0 ? ` (${errorCount} com erro)` : ''}.`,
+      });
+      
+    } catch (error) {
+      console.error("Erro ao gerar todas as faturas:", error);
+      toast({
+        title: "Erro",
+        description: `Erro ao gerar todas as faturas: ${error.message}`,
+        variant: "destructive"
+      });
+    } finally {
+      setIsGeneratingZip(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold mb-2">Gerar Faturas</h2>
+        <p className="text-muted-foreground">
+          Revise as informações e gere as faturas para as unidades selecionadas.
+        </p>
+      </div>
+      
+      <Card>
+        <CardContent className="pt-6">
+          <div className="grid gap-6">
+            <div className="grid gap-2">
+              <h3 className="text-lg font-semibold">Resumo do Faturamento</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-muted p-4 rounded-lg">
+                  <div className="font-medium text-sm text-muted-foreground mb-1">Mês de Referência</div>
+                  <div className="font-semibold">
+                    {getMonthName(billingData.reference.month || 1)} / {billingData.reference.year || new Date().getFullYear()}
+                  </div>
+                </div>
+                
+                <div className="bg-muted p-4 rounded-lg">
+                  <div className="font-medium text-sm text-muted-foreground mb-1">Data de Vencimento</div>
+                  <div className="font-semibold">
+                    {billingData.dueDate ? format(new Date(billingData.dueDate), 'dd/MM/yyyy') : 'Não definida'}
+                  </div>
+                </div>
+                
+                <div className="bg-muted p-4 rounded-lg">
+                  <div className="font-medium text-sm text-muted-foreground mb-1">Total a Faturar</div>
+                  <div className="font-semibold">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalAmount)}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid gap-2">
+              <h3 className="text-lg font-semibold">Itens de Cobrança</h3>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Descrição</th>
+                      <th className="px-4 py-2 text-right">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {billingData.chargeItems?.map((item, index) => (
+                      <tr key={index} className="border-t">
+                        <td className="px-4 py-2">{item.description}</td>
+                        <td className="px-4 py-2 text-right">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.value || 0)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-muted">
+                    <tr>
+                      <td className="px-4 py-2 font-semibold">Total</td>
+                      <td className="px-4 py-2 text-right font-semibold">
+                        {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalAmount)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <h3 className="text-lg font-semibold">Gerar Faturas</h3>
+              <div className="flex justify-between items-center">
+                <Button 
+                  variant="outline" 
+                  onClick={prevStep}
+                  disabled={isGeneratingPDF || isGeneratingZip}
+                >
+                  Voltar
+                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="default" 
+                    onClick={generateAllInvoices}
+                    disabled={isGeneratingPDF || isGeneratingZip}
+                  >
+                    {isGeneratingZip ? (
+                      <>
+                        <Archive className="mr-2 h-4 w-4 animate-spin" />
+                        Gerando ZIP...
+                      </>
+                    ) : (
+                      <>
+                        <Archive className="mr-2 h-4 w-4" />
+                        Gerar Todas as Faturas (ZIP)
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <h3 className="text-lg font-semibold">Faturas Individuais</h3>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Unidade</th>
+                      <th className="px-4 py-2 text-left">Proprietário</th>
+                      <th className="px-4 py-2 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {units.map((unit) => (
+                      <tr key={unit.id} className="border-t">
+                        <td className="px-4 py-2">{unit.block}-{unit.number}</td>
+                        <td className="px-4 py-2">{unit.owner || "Proprietário"}</td>
+                        <td className="px-4 py-2 text-right">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => generateInvoiceForUnit(unit)}
+                            disabled={isGeneratingPDF || isGeneratingZip || generatedInvoices[`${unit.block}-${unit.number}`]}
+                          >
+                            {generatedInvoices[`${unit.block}-${unit.number}`] ? (
+                              <>
+                                <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />
+                                Gerada
+                              </>
+                            ) : isGeneratingPDF ? (
+                              <>
+                                <FileText className="mr-2 h-4 w-4 animate-spin" />
+                                Gerando...
+                              </>
+                            ) : (
+                              <>
+                                <FileText className="mr-2 h-4 w-4" />
+                                Gerar Fatura
+                              </>
+                            )}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default BillingGeneratorStep4;

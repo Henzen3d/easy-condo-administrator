@@ -75,11 +75,6 @@ export function Sidebar({
       href: "/billing",
     },
     {
-      label: "Histórico de Faturas",
-      icon: <FileText size={20} />,
-      href: "/invoice-history",
-    },
-    {
       label: "Faturamento",
       icon: <FilePlus size={20} />,
       href: "/billing-generator",
