@@ -43,47 +43,7 @@ import { toast } from "sonner";
 import { validarChavePIX } from "@/lib/validators";
 import { applyPixKeyMask } from "@/lib/masks";
 import { ColorPicker } from "@/components/ui/color-picker";
-import { supabase } from "@/integrations/supabase/client";
-
-// Sample data for bank accounts
-const initialBankAccounts = [
-  { 
-    id: 1, 
-    name: "Conta Principal", 
-    bank: "Banco do Brasil", 
-    accountNumber: "12345-6", 
-    agency: "1234", 
-    balance: 18450.75, 
-    type: "checking",
-    color: "blue",
-    pixKey: "condominio@email.com",
-    pixKeyType: "email"
-  },
-  { 
-    id: 2, 
-    name: "Reserva", 
-    bank: "Caixa Econômica", 
-    accountNumber: "98765-4", 
-    agency: "5678", 
-    balance: 42680.30, 
-    type: "savings",
-    color: "green",
-    pixKey: "12345678901",
-    pixKeyType: "cpf"
-  },
-  { 
-    id: 3, 
-    name: "Fundo de Obras", 
-    bank: "Itaú", 
-    accountNumber: "45678-9", 
-    agency: "9012", 
-    balance: 75320.15, 
-    type: "checking",
-    color: "amber",
-    pixKey: null,
-    pixKeyType: null
-  },
-];
+import { useBankAccounts, BankAccount } from "@/contexts/BankAccountContext";
 
 // Function to format currency
 const formatCurrency = (value: number) => {
@@ -95,13 +55,12 @@ const formatCurrency = (value: number) => {
 
 // Bank account card component
 interface BankAccountCardProps {
-  account: typeof initialBankAccounts[0];
-  onUpdate: (updatedAccount: typeof initialBankAccounts[0]) => void;
-  onDelete: (id: number) => void;
+  account: BankAccount;
+  onUpdate: (updatedAccount: BankAccount) => void;
+  onDelete: (id: string) => void;
 }
 
-function BankAccountCard({ account, onUpdate, onDelete }: BankAccountCardProps) {
-  const [showBalance, setShowBalance] = useState(false);
+function BankAccountCard({ account, onUpdate, onDelete, showBalance, onToggleBalance }: BankAccountCardProps & { showBalance: boolean, onToggleBalance: () => void }) {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editedAccount, setEditedAccount] = useState({ ...account });
@@ -114,7 +73,7 @@ function BankAccountCard({ account, onUpdate, onDelete }: BankAccountCardProps) 
       setPixKeyError(null);
     }
   }, [isEditDialogOpen, account]);
-  
+
   const getColorClass = (color: string) => {
     switch (color) {
       case 'blue':
@@ -199,7 +158,7 @@ function BankAccountCard({ account, onUpdate, onDelete }: BankAccountCardProps) 
   };
   
   // Função para abrir o diálogo de transferência
-  const handleTransfer = (fromAccountId: number) => {
+  const handleTransfer = (fromAccountId: string) => {
     // Emitir um evento personalizado para abrir o diálogo de transferência
     const event = new CustomEvent('openTransferDialog', { 
       detail: { fromAccountId } 
@@ -216,7 +175,7 @@ function BankAccountCard({ account, onUpdate, onDelete }: BankAccountCardProps) 
             <CardDescription>{account.bank}</CardDescription>
           </div>
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" onClick={() => setShowBalance(!showBalance)}>
+            <Button variant="ghost" size="icon" onClick={onToggleBalance}>
               {showBalance ? <EyeOff size={16} /> : <Eye size={16} />}
             </Button>
             <Button variant="ghost" size="icon" onClick={() => setIsEditDialogOpen(true)}>
@@ -224,7 +183,7 @@ function BankAccountCard({ account, onUpdate, onDelete }: BankAccountCardProps) 
             </Button>
             <Button variant="ghost" size="icon" onClick={() => setIsDeleteDialogOpen(true)}>
               <Trash2 size={16} />
-            </Button>
+          </Button>
           </div>
         </div>
       </CardHeader>
@@ -237,7 +196,7 @@ function BankAccountCard({ account, onUpdate, onDelete }: BankAccountCardProps) 
           <div>
             <p className="text-muted-foreground">Conta</p>
             <p>{account.accountNumber}</p>
-          </div>
+        </div>
           <div>
             <p className="text-muted-foreground">Tipo</p>
             <p>{account.type === "checking" ? "Corrente" : "Poupança"}</p>
@@ -474,9 +433,24 @@ function BankAccountCard({ account, onUpdate, onDelete }: BankAccountCardProps) 
 }
 
 export default function BankAccounts() {
-  const [bankAccounts, setBankAccounts] = useState(initialBankAccounts);
   const [isNewAccountDialogOpen, setIsNewAccountDialogOpen] = useState(false);
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("all");
+  const [pixKeyError, setPixKeyError] = useState<string | null>(null);
+  const [showAllBalances, setShowAllBalances] = useState(false);
+  
+  // Usar o contexto em vez de estados locais
+  const { 
+    bankAccounts, 
+    addBankAccount, 
+    updateBankAccount, 
+    deleteBankAccount, 
+    addTransaction,
+    reloadData,
+    isLoading
+  } = useBankAccounts();
+  
+  // Estado para o formulário de nova conta
   const [newAccount, setNewAccount] = useState({
     name: "",
     bank: "",
@@ -488,24 +462,22 @@ export default function BankAccounts() {
     pixKey: "",
     pixKeyType: "none"
   });
-  const [activeTab, setActiveTab] = useState("all");
-  const [pixKeyError, setPixKeyError] = useState<string | null>(null);
   
   // Estado para o formulário de transferência
   const [transferForm, setTransferForm] = useState({
-    fromAccountId: 0,
-    toAccountId: 0,
+    fromAccountId: "",
+    toAccountId: "",
     amount: 0,
     description: ""
   });
   
   // Ouvir o evento para abrir o diálogo de transferência
   useEffect(() => {
-    const handleOpenTransferDialog = (event: CustomEvent<{ fromAccountId: number }>) => {
+    const handleOpenTransferDialog = (event: CustomEvent<{ fromAccountId: string }>) => {
       setTransferForm({
         ...transferForm,
         fromAccountId: event.detail.fromAccountId,
-        toAccountId: bankAccounts.find(a => a.id !== event.detail.fromAccountId)?.id || 0
+        toAccountId: bankAccounts.find(a => a.id !== event.detail.fromAccountId)?.id || ""
       });
       setIsTransferDialogOpen(true);
     };
@@ -521,54 +493,13 @@ export default function BankAccounts() {
   const filteredAccounts = activeTab === "all" 
     ? bankAccounts 
     : bankAccounts.filter(account => account.type === activeTab);
-
-  // Função para validar a chave PIX
-  const validatePixKey = (value: string, type: string) => {
-    if (!type || type === "none") {
-      setPixKeyError(null);
-      return true;
-    }
-    
-    const result = validarChavePIX(value, type);
-    if (!result.valido) {
-      setPixKeyError(result.mensagem || "Chave PIX inválida");
-      return false;
-    }
-    
-    setPixKeyError(null);
-    return true;
-  };
   
-  // Função para aplicar máscara à chave PIX
-  const handlePixKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { value } = e.target;
-    const type = newAccount.pixKeyType;
-    
-    if (!type || type === "none") {
-      setNewAccount({...newAccount, pixKey: value});
-      return;
-    }
-    
-    const maskedValue = applyPixKeyMask(value, type);
-    setNewAccount({...newAccount, pixKey: maskedValue});
-    
-    // Validar após a digitação
-    validatePixKey(maskedValue, type);
-  };
-
   // Função para adicionar nova conta
   const handleAddAccount = () => {
     // Validar campos obrigatórios
     if (!newAccount.name || !newAccount.bank || !newAccount.accountNumber || !newAccount.agency) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
-    }
-    
-    // Validar a chave PIX
-    if (newAccount.pixKeyType && newAccount.pixKeyType !== "none") {
-      if (!validatePixKey(newAccount.pixKey, newAccount.pixKeyType)) {
-        return;
-      }
     }
     
     // Preparar dados para salvar
@@ -578,11 +509,11 @@ export default function BankAccounts() {
       pixKey: newAccount.pixKeyType === "none" ? null : newAccount.pixKey
     };
     
-    const newId = Math.max(...bankAccounts.map(a => a.id), 0) + 1;
-    setBankAccounts([...bankAccounts, { ...accountToSave, id: newId }]);
-    setIsNewAccountDialogOpen(false);
+    // Adicionar conta usando o contexto
+    addBankAccount(accountToSave);
     
     // Resetar o formulário
+    setIsNewAccountDialogOpen(false);
     setNewAccount({
       name: "",
       bank: "",
@@ -594,27 +525,8 @@ export default function BankAccounts() {
       pixKey: "",
       pixKeyType: "none"
     });
-    setPixKeyError(null);
-    
-    toast.success("Conta bancária adicionada com sucesso");
   };
-
-  // Função para atualizar uma conta existente
-  const handleUpdateAccount = (updatedAccount: typeof bankAccounts[0]) => {
-    setBankAccounts(bankAccounts.map(account => 
-      account.id === updatedAccount.id ? updatedAccount : account
-    ));
-    
-    toast.success("Conta bancária atualizada com sucesso");
-  };
-
-  // Função para excluir uma conta
-  const handleDeleteAccount = (id: number) => {
-    setBankAccounts(bankAccounts.filter(account => account.id !== id));
-    
-    toast.success("Conta bancária excluída com sucesso");
-  };
-
+  
   // Função para realizar a transferência entre contas
   const handleExecuteTransfer = async () => {
     try {
@@ -644,131 +556,74 @@ export default function BankAccounts() {
         return;
       }
       
-      // Atualizar os saldos
-      const updatedFromAccount = {
-        ...fromAccount,
-        balance: fromAccount.balance - transferForm.amount
+      // Obter a data atual no formato correto (YYYY-MM-DD)
+      const today = new Date();
+      const formattedDate = today.toISOString().split('T')[0];
+      
+      // Criar a transação
+      const transaction = {
+        description: transferForm.description || `Transferência de ${fromAccount.name} para ${toAccount.name}`,
+        amount: transferForm.amount,
+        type: "transfer" as const,
+        category: "Transferência",
+        account: fromAccount.id.toString(), // Usar o ID da conta em vez do nome
+        to_account: toAccount.id.toString(), // Usar o ID da conta em vez do nome
+        date: formattedDate,
+        status: "completed",
+        payee: toAccount.name, // Adicionar o destinatário
+        unit: "" // Campo obrigatório, mesmo que vazio
       };
       
-      const updatedToAccount = {
-        ...toAccount,
-        balance: toAccount.balance + transferForm.amount
-      };
-      
-      // Atualizar o estado local
-      setBankAccounts(bankAccounts.map(account => {
-        if (account.id === fromAccount.id) return updatedFromAccount;
-        if (account.id === toAccount.id) return updatedToAccount;
-        return account;
-      }));
-      
-      // Registrar as transações localmente
-      const today = new Date().toISOString().split('T')[0];
-      const descriptionFrom = transferForm.description || `Transferência para ${toAccount.name}`;
-      const descriptionTo = transferForm.description || `Transferência de ${fromAccount.name}`;
-      
-      // Simular o registro de transações (em um ambiente real, isso seria feito no banco de dados)
-      // Aqui estamos apenas simulando o registro para fins de demonstração
-      console.log("Transação registrada (saída):", {
-        account: fromAccount.id.toString(),
-        amount: transferForm.amount,
-        category: 'Transferência',
-        date: today,
-        description: descriptionFrom,
-        payee: toAccount.name,
-        status: 'completed',
-        type: 'expense',
-        to_account: toAccount.id.toString()
-      });
-      
-      console.log("Transação registrada (entrada):", {
-        account: toAccount.id.toString(),
-        amount: transferForm.amount,
-        category: 'Transferência',
-        date: today,
-        description: descriptionTo,
-        payee: fromAccount.name,
-        status: 'completed',
-        type: 'income',
-        to_account: fromAccount.id.toString()
-      });
-      
-      // Em um ambiente real, você atualizaria o banco de dados aqui
-      // Descomente o código abaixo para ativar a integração com o Supabase
-      
-      try {
-        // Atualizar a conta de origem
-        const { error: fromError } = await supabase
-          .from('bank_accounts')
-          .update({ balance: updatedFromAccount.balance })
-          .eq('id', fromAccount.id);
-          
-        if (fromError) throw fromError;
-        
-        // Atualizar a conta de destino
-        const { error: toError } = await supabase
-          .from('bank_accounts')
-          .update({ balance: updatedToAccount.balance })
-          .eq('id', toAccount.id);
-          
-        if (toError) throw toError;
-        
-        // Registrar a transação
-        const { error: transactionError } = await supabase
-          .from('transactions')
-          .insert([
-            {
-              account: fromAccount.id.toString(),
-              amount: transferForm.amount,
-              category: 'Transferência',
-              date: today,
-              description: descriptionFrom,
-              payee: toAccount.name,
-              status: 'completed',
-              type: 'expense',
-              to_account: toAccount.id.toString()
-            },
-            {
-              account: toAccount.id.toString(),
-              amount: transferForm.amount,
-              category: 'Transferência',
-              date: today,
-              description: descriptionTo,
-              payee: fromAccount.name,
-              status: 'completed',
-              type: 'income',
-              to_account: fromAccount.id.toString()
-            }
-          ]);
-          
-        if (transactionError) throw transactionError;
-      } catch (dbError) {
-        console.error('Erro ao atualizar o banco de dados:', dbError);
-        // Mesmo com erro no banco, mantemos a atualização da UI para melhor experiência do usuário
-        toast.error("Erro ao registrar a transação no banco de dados, mas os saldos foram atualizados localmente");
-      }
-      
-      toast.success(`Transferência de ${formatCurrency(transferForm.amount)} realizada com sucesso`);
+      // Adicionar a transação usando o contexto
+      await addTransaction(transaction);
       
       // Fechar o diálogo e resetar o formulário
       setIsTransferDialogOpen(false);
       setTransferForm({
-        fromAccountId: 0,
-        toAccountId: 0,
+        fromAccountId: "",
+        toAccountId: "",
         amount: 0,
         description: ""
       });
+      
+      toast.success(`Transferência de ${fromAccount.name} para ${toAccount.name} realizada com sucesso`);
     } catch (error) {
-      console.error('Erro ao realizar transferência:', error);
+      console.error("Erro ao realizar transferência:", error);
       toast.error("Erro ao realizar transferência");
     }
+  };
+  
+  // Função para alternar a visibilidade de todos os saldos
+  const toggleAllBalances = () => {
+    setShowAllBalances(!showAllBalances);
   };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Contas Bancárias</h1>
-        <p className="text-muted-foreground animate-slide-in-top animation-delay-100">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold tracking-tight">Contas Bancárias</h1>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              className="flex items-center gap-2"
+              onClick={toggleAllBalances}
+            >
+              {showAllBalances ? <EyeOff size={16} /> : <Eye size={16} />}
+              <span>{showAllBalances ? "Esconder Saldos" : "Mostrar Saldos"}</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="flex items-center gap-2"
+              onClick={() => reloadData()}
+              disabled={isLoading}
+            >
+              <ArrowRightLeft size={16} className={isLoading ? "animate-spin" : ""} />
+              <span>{isLoading ? "Atualizando..." : "Atualizar Dados"}</span>
+            </Button>
+          </div>
+        </div>
+        <p className="text-muted-foreground">
           Gerencie as contas bancárias do condomínio
         </p>
       </div>
@@ -908,7 +763,7 @@ export default function BankAccounts() {
                     id="pix-key" 
                     placeholder="Digite a chave PIX" 
                     value={newAccount.pixKey}
-                    onChange={handlePixKeyChange}
+                    onChange={(e) => setNewAccount({...newAccount, pixKey: e.target.value})}
                     onBlur={() => {
                       if (newAccount.pixKeyType && newAccount.pixKeyType !== "none") {
                         validatePixKey(newAccount.pixKey, newAccount.pixKeyType);
@@ -956,8 +811,10 @@ export default function BankAccounts() {
           <BankAccountCard 
             key={account.id} 
             account={account} 
-            onUpdate={handleUpdateAccount}
-            onDelete={handleDeleteAccount}
+            onUpdate={updateBankAccount}
+            onDelete={deleteBankAccount}
+            showBalance={showAllBalances}
+            onToggleBalance={toggleAllBalances}
           />
         ))}
         
@@ -976,53 +833,53 @@ export default function BankAccounts() {
       
       {/* Diálogo de Transferência */}
       <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
+              <DialogContent>
+                <DialogHeader>
             <DialogTitle>Transferência entre Contas</DialogTitle>
-            <DialogDescription>
+                  <DialogDescription>
               Transfira valores entre suas contas bancárias.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="space-y-2">
               <Label htmlFor="from-account">Conta de Origem</Label>
               <Select 
-                value={transferForm.fromAccountId.toString()}
-                onValueChange={(value) => setTransferForm({...transferForm, fromAccountId: parseInt(value)})}
+                value={transferForm.fromAccountId}
+                onValueChange={(value) => setTransferForm({...transferForm, fromAccountId: value})}
               >
                 <SelectTrigger id="from-account">
                   <SelectValue placeholder="Selecione a conta de origem" />
-                </SelectTrigger>
-                <SelectContent>
+                        </SelectTrigger>
+                        <SelectContent>
                   {bankAccounts.map(account => (
-                    <SelectItem key={account.id} value={account.id.toString()}>
+                    <SelectItem key={account.id} value={account.id}>
                       {account.name} - {formatCurrency(account.balance)}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
               <Label htmlFor="to-account">Conta de Destino</Label>
               <Select 
-                value={transferForm.toAccountId.toString()}
-                onValueChange={(value) => setTransferForm({...transferForm, toAccountId: parseInt(value)})}
+                value={transferForm.toAccountId}
+                onValueChange={(value) => setTransferForm({...transferForm, toAccountId: value})}
               >
                 <SelectTrigger id="to-account">
                   <SelectValue placeholder="Selecione a conta de destino" />
-                </SelectTrigger>
-                <SelectContent>
+                      </SelectTrigger>
+                      <SelectContent>
                   {bankAccounts
                     .filter(account => account.id !== transferForm.fromAccountId)
                     .map(account => (
-                      <SelectItem key={account.id} value={account.id.toString()}>
+                      <SelectItem key={account.id} value={account.id}>
                         {account.name} - {formatCurrency(account.balance)}
                       </SelectItem>
                     ))
                   }
-                </SelectContent>
-              </Select>
-            </div>
+                      </SelectContent>
+                    </Select>
+                  </div>
             <div className="space-y-2">
               <Label htmlFor="transfer-amount">Valor</Label>
               <Input 
@@ -1042,8 +899,8 @@ export default function BankAccounts() {
                 onChange={(e) => setTransferForm({...transferForm, description: e.target.value})}
               />
             </div>
-          </div>
-          <DialogFooter>
+                </div>
+                <DialogFooter>
             <Button variant="outline" onClick={() => setIsTransferDialogOpen(false)}>
               Cancelar
             </Button>
@@ -1054,9 +911,9 @@ export default function BankAccounts() {
             >
               Transferir
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
     </div>
   );
 }

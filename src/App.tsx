@@ -13,6 +13,7 @@ import Settings from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
 import Index from "@/pages/Index";
 import UtilityManagement from "@/pages/UtilityManagement";
+import BankAccountProvider from "@/contexts/BankAccountContext";
 
 function AppContent() {
   const location = useLocation();
@@ -33,20 +34,22 @@ function AppContent() {
               <Route path="/" element={<Index />} />
             </Routes>
           ) : (
-            <Layout>
-              <Routes>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/units" element={<Units />} />
-                <Route path="/bank-accounts" element={<BankAccounts />} />
-                <Route path="/transactions" element={<Transactions />} />
-                <Route path="/billing" element={<Billing />} />
-                <Route path="/billing-generator" element={<BillingGenerator />} />
-                <Route path="/utility-management" element={<UtilityManagement />} />
-                <Route path="/reports" element={<Reports />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Layout>
+            <BankAccountProvider>
+              <Layout>
+                <Routes>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/units" element={<Units />} />
+                  <Route path="/bank-accounts" element={<BankAccounts />} />
+                  <Route path="/transactions" element={<Transactions />} />
+                  <Route path="/billing" element={<Billing />} />
+                  <Route path="/billing-generator" element={<BillingGenerator />} />
+                  <Route path="/utility-management" element={<UtilityManagement />} />
+                  <Route path="/reports" element={<Reports />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Layout>
+            </BankAccountProvider>
           )}
           <Toaster position="bottom-right" />
         </>

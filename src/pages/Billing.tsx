@@ -74,6 +74,8 @@ import {
   markBillingAsSent,
   Billing as BillingType
 } from "@/lib/billingService";
+import { useBankAccounts } from "@/contexts/BankAccountContext";
+import { findInvoiceByBillingId } from "@/lib/invoiceService";
 import NewBillingForm from "@/components/billing/NewBillingForm";
 import EditBillingForm from "@/components/billing/EditBillingForm";
 import BillingFilters from "@/components/billing/BillingFilters";
@@ -155,6 +157,7 @@ const Billing = () => {
     endDate: null
   });
   const [isSummaryDialogOpen, setIsSummaryDialogOpen] = useState(false);
+  const { bankAccounts, addTransaction, updateBankAccount } = useBankAccounts();
 
   // Memoize fetchBillings to prevent re-renders causing multiple fetches
   const fetchBillings = useCallback(async () => {
@@ -313,61 +316,115 @@ const Billing = () => {
     if (!confirmAction) return;
     
     setIsActionInProgress(true);
-    let success = false;
+    let result;
     
     try {
       switch (confirmAction.type) {
         case 'pay':
-          success = await updateBillingStatus(confirmAction.id, 'paid');
-          if (success) {
+          // Verificar se a cobrança está associada a uma fatura
+          const billing = billings.find(b => b.id === confirmAction.id);
+          if (!billing) {
+            toast.error('Cobrança não encontrada');
+            break;
+          }
+
+          // Buscar a fatura associada à cobrança
+          const invoice = await findInvoiceByBillingId(confirmAction.id);
+          
+          // Se a cobrança estiver associada a uma fatura, não permitir o pagamento direto
+          if (invoice) {
+            toast.error('Esta cobrança está associada a uma fatura. Por favor, efetue o pagamento através da fatura.');
+            break;
+          }
+
+          // Se não houver contas bancárias cadastradas
+          if (bankAccounts.length === 0) {
+            toast.error('Não há contas bancárias cadastradas para registrar o pagamento');
+            break;
+          }
+
+          // Usar a primeira conta bancária como padrão
+          const defaultAccount = bankAccounts[0];
+          
+          result = await updateBillingStatus(confirmAction.id, 'paid');
+          if (result.success) {
+            // Atualizar o estado local das cobranças
             setBillings(prev => 
-              prev.map(billing => 
-                billing.id === confirmAction.id ? { ...billing, status: "paid" } : billing
+              prev.map(b => 
+                b.id === confirmAction.id ? { ...b, status: "paid" } : b
               )
             );
+
+            // Adicionar uma transação e atualizar o saldo da conta
+            if (billing) {
+              // Adicionar a transação
+              addTransaction({
+                id: Date.now(), // ID temporário
+                account: defaultAccount.id.toString(),
+                amount: billing.amount,
+                category: 'Receita',
+                date: new Date().toISOString().split('T')[0],
+                description: `Pagamento de cobrança: ${billing.description}`,
+                payee: billing.resident,
+                status: 'completed',
+                type: 'income',
+                unit: billing.unit
+              });
+
+              // Atualizar o saldo da conta
+              updateBankAccount({
+                ...defaultAccount,
+                balance: defaultAccount.balance + billing.amount
+              });
+            }
+
             toast.success('Cobrança marcada como paga');
+          } else {
+            toast.error('Erro ao marcar cobrança como paga');
           }
           break;
           
         case 'send':
-          success = await updateBillingFlag(confirmAction.id, 'is_sent', true);
-          if (success) {
+          result = await updateBillingFlag(confirmAction.id, 'is_sent', true);
+          if (result.success) {
             setBillings(prev => 
               prev.map(billing => 
                 billing.id === confirmAction.id ? { ...billing, is_sent: true } : billing
               )
             );
             toast.success('Cobrança marcada como enviada');
+          } else {
+            toast.error('Erro ao marcar cobrança como enviada');
           }
           break;
           
         case 'print':
-          success = await updateBillingFlag(confirmAction.id, 'is_printed', true);
-          if (success) {
+          result = await updateBillingFlag(confirmAction.id, 'is_printed', true);
+          if (result.success) {
             setBillings(prev => 
               prev.map(billing => 
                 billing.id === confirmAction.id ? { ...billing, is_printed: true } : billing
               )
             );
             toast.success('Cobrança marcada como impressa');
+          } else {
+            toast.error('Erro ao marcar cobrança como impressa');
           }
           break;
           
         case 'cancel':
-          success = await updateBillingStatus(confirmAction.id, 'cancelled');
-          if (success) {
+          result = await updateBillingStatus(confirmAction.id, 'cancelled');
+          if (result.success) {
             setBillings(prev => 
               prev.map(billing => 
                 billing.id === confirmAction.id ? { ...billing, status: "cancelled" } : billing
               )
             );
             toast.success('Cobrança cancelada');
+          } else {
+            toast.error('Erro ao cancelar cobrança');
           }
           break;
-      }
-      
-      if (!success) {
-        toast.error(`Erro ao executar ação: ${confirmAction.title}`);
       }
     } catch (error) {
       console.error('Error executing action:', error);
@@ -682,21 +739,14 @@ const Billing = () => {
   return (
     <div className="container max-w-7xl mx-auto py-6 space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Cobranças</h1>
-          <p className="text-muted-foreground animate-slide-in-top animation-delay-200">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Cobranças</h1>
+        <p className="text-muted-foreground animate-slide-in-top animation-delay-200">
             Gerencie as cobranças do condomínio.
           </p>
         </div>
         
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2" asChild>
-            <a href="/invoice-history">
-              <FileText size={16} />
-              <span>Histórico de Faturas</span>
-            </a>
-          </Button>
-          
           <Button className="gap-2" onClick={() => setIsNewBillingDialogOpen(true)}>
             <Plus size={16} />
             <span>Nova Cobrança</span>
@@ -801,7 +851,6 @@ const Billing = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
                       <TableHead>Unidade</TableHead>
                       <TableHead>Morador</TableHead>
                       <TableHead>Descrição</TableHead>
@@ -814,20 +863,19 @@ const Billing = () => {
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
                           Carregando cobranças...
                         </TableCell>
                       </TableRow>
                     ) : filteredBillings.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
                           Nenhuma cobrança encontrada.
                         </TableCell>
                       </TableRow>
                     ) : (
                       filteredBillings.map((billing) => (
                         <TableRow key={billing.id}>
-                          <TableCell>{billing.id}</TableCell>
                           <TableCell>{billing.unit}</TableCell>
                           <TableCell>{billing.resident}</TableCell>
                           <TableCell>{billing.description}</TableCell>

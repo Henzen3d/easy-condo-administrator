@@ -313,7 +313,7 @@ export async function markInvoiceAsPaid(
     if (balanceError) throw balanceError;
     
     // 5. Registrar a transação
-    const { error: transactionError } = await supabase
+    const { data: transaction, error: transactionError } = await supabase
       .from('transactions')
       .insert({
         account: paymentAccountId.toString(),
@@ -325,14 +325,29 @@ export async function markInvoiceAsPaid(
         status: 'completed',
         type: 'income',
         unit: invoice.unit
-      });
+      })
+      .select()
+      .single();
       
     if (transactionError) throw transactionError;
     
-    return true;
+    // Retornar informações completas para atualização do estado local
+    return {
+      success: true,
+      invoice: {
+        id: invoice.id,
+        invoiceNumber: invoice.invoice_number,
+        totalAmount: invoice.total_amount,
+        unit: invoice.unit,
+        resident: invoice.resident
+      },
+      transaction: transaction || null,
+      accountId: paymentAccountId,
+      newBalance: newBalance
+    };
   } catch (error) {
     console.error('Erro ao marcar fatura como paga:', error);
-    return false;
+    return { success: false };
   }
 }
 
@@ -422,5 +437,55 @@ export async function generateInvoiceNumber(): Promise<string> {
     // Fallback: gerar um número baseado no timestamp
     const timestamp = Date.now().toString().slice(-8);
     return `INV-${timestamp}`;
+  }
+}
+
+/**
+ * Busca uma fatura associada a uma cobrança específica
+ */
+export async function findInvoiceByBillingId(billingId: string) {
+  try {
+    // Primeiro, buscar o item da fatura que contém o billingId
+    const { data: invoiceItem, error: itemError } = await supabase
+      .from('invoice_items')
+      .select('invoice_id')
+      .eq('billing_id', billingId)
+      .single();
+      
+    if (itemError || !invoiceItem) {
+      // Se não encontrar ou ocorrer um erro, significa que não há fatura associada
+      return null;
+    }
+    
+    // Buscar a fatura completa
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('id', invoiceItem.invoice_id)
+      .single();
+      
+    if (invoiceError || !invoice) {
+      return null;
+    }
+    
+    return {
+      id: invoice.id,
+      invoiceNumber: invoice.invoice_number,
+      referenceMonth: invoice.reference_month,
+      referenceYear: invoice.reference_year,
+      unit: invoice.unit,
+      unitId: invoice.unit_id,
+      resident: invoice.resident,
+      totalAmount: invoice.total_amount,
+      dueDate: invoice.due_date,
+      status: invoice.status as InvoiceStatus,
+      paymentDate: invoice.payment_date,
+      paymentMethod: invoice.payment_method,
+      paymentAccountId: invoice.payment_account_id,
+      notes: invoice.notes
+    };
+  } catch (error) {
+    console.error('Erro ao buscar fatura por ID de cobrança:', error);
+    return null;
   }
 } 

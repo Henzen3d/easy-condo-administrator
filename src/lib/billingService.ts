@@ -77,6 +77,17 @@ export async function fetchBillingsByUnit(unit: string) {
 // Função para atualizar o status de uma cobrança
 export async function updateBillingStatus(id: string, status: BillingStatus) {
   try {
+    // Buscar a cobrança atual para ter todas as informações
+    const { data: billing, error: fetchError } = await supabase
+      .from('billings')
+      .select('*')
+      .eq('id', id)
+      .single();
+      
+    if (fetchError) throw fetchError;
+    if (!billing) throw new Error('Cobrança não encontrada');
+    
+    // Atualizar o status
     const { error } = await supabase
       .from('billings')
       .update({ status, updated_at: new Date().toISOString() })
@@ -86,10 +97,17 @@ export async function updateBillingStatus(id: string, status: BillingStatus) {
       throw error;
     }
 
-    return true;
+    // Retornar a cobrança atualizada
+    return {
+      success: true,
+      billing: {
+        ...billing,
+        status
+      }
+    };
   } catch (error) {
     console.error('Erro ao atualizar status da cobrança:', error);
-    return false;
+    return { success: false };
   }
 }
 

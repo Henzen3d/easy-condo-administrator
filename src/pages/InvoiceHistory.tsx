@@ -76,6 +76,7 @@ import {
 import { generateBillingsSummaryPDF } from "@/lib/pdfService";
 import { Billing } from "@/lib/billingService";
 import { generatePixQRCode, hasBankAccountWithPix } from "@/lib/pixService";
+import { useBankAccounts } from "@/contexts/BankAccountContext";
 
 const InvoiceStatusBadge = ({ status }: { status: InvoiceStatus }) => {
   const statusClasses = {
@@ -109,7 +110,7 @@ const InvoiceHistory = () => {
   const [isPixDialogOpen, setIsPixDialogOpen] = useState(false);
   const [pixQRCode, setPixQRCode] = useState<string | null>(null);
   const [hasPixAccounts, setHasPixAccounts] = useState(false);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const { bankAccounts, addTransaction, updateBankAccount } = useBankAccounts();
   
   // Estados para o formulário de pagamento
   const [paymentForm, setPaymentForm] = useState({
@@ -260,14 +261,72 @@ const InvoiceHistory = () => {
         return;
       }
       
-      const success = await markInvoiceAsPaid(
+      const accountId = parseInt(paymentForm.accountId);
+      
+      const result = await markInvoiceAsPaid(
         selectedInvoice.id,
         paymentForm.method,
-        parseInt(paymentForm.accountId),
+        accountId,
         paymentForm.date
       );
       
-      if (success) {
+      if (result.success) {
+        // Atualizar o estado local das faturas
+        setInvoices(prev => 
+          prev.map(invoice => 
+            invoice.id === selectedInvoice.id 
+              ? { 
+                  ...invoice, 
+                  status: 'paid',
+                  paymentDate: paymentForm.date,
+                  paymentMethod: paymentForm.method,
+                  paymentAccountId: accountId
+                } 
+              : invoice
+          )
+        );
+        
+        // Encontrar a conta bancária selecionada
+        const selectedAccount = bankAccounts.find(account => account.id === accountId);
+        
+        if (selectedAccount) {
+          // Adicionar a transação ao contexto (usar a transação retornada se disponível)
+          if (result.transaction) {
+            addTransaction({
+              id: result.transaction.id,
+              account: accountId.toString(),
+              amount: result.transaction.amount,
+              category: result.transaction.category,
+              date: result.transaction.date,
+              description: result.transaction.description,
+              payee: result.transaction.payee,
+              status: result.transaction.status,
+              type: result.transaction.type,
+              unit: result.transaction.unit
+            });
+          } else {
+            // Fallback para o caso de não ter a transação retornada
+            addTransaction({
+              id: Date.now(), // ID temporário
+              account: accountId.toString(),
+              amount: selectedInvoice.totalAmount,
+              category: 'Receita',
+              date: paymentForm.date,
+              description: `Pagamento da fatura ${selectedInvoice.invoiceNumber}`,
+              payee: selectedInvoice.resident,
+              status: 'completed',
+              type: 'income',
+              unit: selectedInvoice.unit
+            });
+          }
+          
+          // Atualizar o saldo da conta (usar o novo saldo retornado se disponível)
+          updateBankAccount({
+            ...selectedAccount,
+            balance: result.newBalance || (selectedAccount.balance + selectedInvoice.totalAmount)
+          });
+        }
+        
         toast.success('Pagamento registrado com sucesso');
         setIsPaymentDialogOpen(false);
         fetchInvoicesData(); // Recarregar faturas

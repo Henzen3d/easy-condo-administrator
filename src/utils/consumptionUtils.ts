@@ -1,4 +1,3 @@
-
 import { supabase } from "@/integrations/supabase/client";
 import { MeterReading, UtilityRate } from "@/types/consumption";
 
@@ -152,8 +151,18 @@ export async function updateBillingStatus(id: string, status: 'pending' | 'paid'
 }
 
 // Update billing flags (is_sent, is_printed) with improved error handling
-export async function updateBillingFlag(id: string, field: 'is_sent' | 'is_printed', value: boolean): Promise<boolean> {
+export async function updateBillingFlag(id: string, field: 'is_sent' | 'is_printed', value: boolean) {
   try {
+    // Buscar a cobrança atual para ter todas as informações
+    const { data: billing, error: fetchError } = await supabase
+      .from('billings')
+      .select('*')
+      .eq('id', id)
+      .single();
+      
+    if (fetchError) throw fetchError;
+    if (!billing) throw new Error('Cobrança não encontrada');
+    
     console.log(`Updating billing ${id} ${field} to ${value}`);
     const { error } = await supabase
       .from('billings')
@@ -165,14 +174,20 @@ export async function updateBillingFlag(id: string, field: 'is_sent' | 'is_print
     
     if (error) {
       console.error(`Error updating billing ${field}:`, error);
-      return false;
+      return { success: false };
     }
     
     console.log(`Billing ${id} ${field} updated successfully to ${value}`);
-    return true;
+    return {
+      success: true,
+      billing: {
+        ...billing,
+        [field]: value
+      }
+    };
   } catch (error) {
     console.error(`Exception while updating billing ${field}:`, error);
-    return false;
+    return { success: false };
   }
 }
 
