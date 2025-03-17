@@ -4,14 +4,14 @@ import { toast } from 'sonner';
 
 // Definição de interfaces
 export interface BankAccount {
-  id: string;
+  id: string | number;
   name: string;
+  bank: string;
+  accountNumber: string;
+  agency: string;
   balance: number;
-  bank?: string;
-  accountNumber?: string;
-  agency?: string;
-  type?: string;
-  color?: string;
+  type: "checking" | "savings" | "investment";
+  color: string;
   pixKey?: string | null;
   pixKeyType?: string | null;
 }
@@ -253,19 +253,26 @@ export const BankAccountProvider: React.FC<{ children: ReactNode }> = ({ childre
   // Função para adicionar uma nova conta bancária
   const addBankAccount = async (account: Omit<BankAccount, 'id'>) => {
     try {
+      // Garantir que o balance seja um número
+      const balance = typeof account.balance === 'string' 
+        ? parseFloat(account.balance.toString().replace(',', '.')) 
+        : account.balance || 0;
+
       // Preparar os dados para o Supabase
       const supabaseData = {
         name: account.name,
         bank: account.bank,
         account_number: account.accountNumber,
         agency: account.agency,
-        balance: account.balance,
-        type: account.type,
-        color: account.color,
-        pix_key: account.pixKey,
-        pix_key_type: account.pixKeyType
+        balance: balance,
+        account_type: account.type || "checking", // Alterado de 'type' para 'account_type'
+        color: account.color || "blue",
+        pix_key: account.pixKey || null,
+        pix_key_type: account.pixKeyType || null
       };
       
+      console.log('Dados sendo enviados para o Supabase:', supabaseData);
+
       // Inserir no Supabase
       const { data, error } = await supabase
         .from('bank_accounts')
@@ -287,7 +294,7 @@ export const BankAccountProvider: React.FC<{ children: ReactNode }> = ({ childre
           accountNumber: data[0].account_number,
           agency: data[0].agency,
           balance: data[0].balance,
-          type: data[0].type,
+          type: data[0].account_type, // Alterado para mapear corretamente
           color: data[0].color || 'blue',
           pixKey: data[0].pix_key,
           pixKeyType: data[0].pix_key_type
@@ -371,13 +378,19 @@ export const BankAccountProvider: React.FC<{ children: ReactNode }> = ({ childre
   // Função para adicionar uma nova transação
   const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
     try {
-      // Garantir que a data está no formato correto (YYYY-MM-DD)
-      const formattedDate = transaction.date ? new Date(transaction.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+      const formattedDate = transaction.date ? 
+        new Date(transaction.date).toISOString().split('T')[0] : 
+        new Date().toISOString().split('T')[0];
       
+      // Converter o valor para número com ponto decimal
+      const amount = typeof transaction.amount === 'string' ? 
+        parseFloat(transaction.amount.replace(',', '.')) : 
+        transaction.amount;
+
       // Preparar os dados para o Supabase
       const supabaseData = {
         description: transaction.description,
-        amount: transaction.amount,
+        amount: amount, // Usar o valor numérico convertido
         type: transaction.type,
         category: transaction.category,
         account: transaction.account,

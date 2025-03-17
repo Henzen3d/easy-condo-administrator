@@ -452,7 +452,7 @@ const Settings = () => {
   const [activeTab, setActiveTab] = useState("condominium");
   
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <>
       <div className="flex items-center">
         <h1 className="text-3xl font-bold tracking-tight mr-2">Configurações</h1>
         <SettingsIcon className="text-muted-foreground" />
@@ -523,7 +523,9 @@ const Settings = () => {
           <SecuritySettings />
         </TabsContent>
       </Tabs>
-    </div>
+      {/* Espaço adicional para evitar sobreposição do menu flutuante */}
+      <div className="h-20" />
+    </>
   );
 };
 

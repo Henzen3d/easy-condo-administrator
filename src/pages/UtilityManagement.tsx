@@ -8,10 +8,10 @@ export default function UtilityManagement() {
   const [activeTab, setActiveTab] = useState("rates");
 
   return (
-    <div className="container max-w-7xl mx-auto py-6 space-y-6 animate-fade-in">
+    <>
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">
-          Gestão de Utilities
+          Consumos
         </h1>
         <p className="text-muted-foreground animate-slide-in-top animation-delay-200">
           Configure taxas e registre leituras de consumo de gás e água.
@@ -32,6 +32,9 @@ export default function UtilityManagement() {
           <MeterReadingsForm />
         </TabsContent>
       </Tabs>
-    </div>
+
+      {/* Espaço adicional para evitar sobreposição do menu flutuante */}
+      <div className="h-20" />
+    </>
   );
 }

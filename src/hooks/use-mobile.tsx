@@ -1,25 +1,32 @@
 
 import * as React from "react"
 
-const MOBILE_BREAKPOINT = 768
-
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState<boolean | undefined>(undefined)
+  const [isMobile, setIsMobile] = React.useState<boolean>(false)
 
   React.useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-    
-    // Add event listener
-    window.addEventListener("resize", handleResize)
-    
-    // Initial check
-    handleResize()
-    
-    // Cleanup
-    return () => window.removeEventListener("resize", handleResize)
-  }, [])
+    const checkIsMobile = () => {
+      // Verifica se é um dispositivo móvel usando user agent
+      const userAgent = 
+        typeof window.navigator === "undefined" ? "" : navigator.userAgent;
+      const mobileRegex = 
+        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
+      
+      // Verifica apenas pelo user agent, removendo a verificação de largura
+      const isMobileDevice = mobileRegex.test(userAgent);
+      
+      setIsMobile(isMobileDevice);
+    };
 
-  return !!isMobile
+    // Verificação inicial
+    checkIsMobile();
+
+    // Adiciona listener para mudanças de orientação do dispositivo
+    window.addEventListener("orientationchange", checkIsMobile);
+
+    // Cleanup
+    return () => window.removeEventListener("orientationchange", checkIsMobile);
+  }, []);
+
+  return isMobile;
 }

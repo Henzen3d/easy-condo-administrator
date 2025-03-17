@@ -156,6 +156,7 @@ export default function Transactions() {
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("all");
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
+  const [activeDialog, setActiveDialog] = useState<'income' | 'expense' | 'transfer' | null>(null);
   
   // Usar o contexto em vez de estados locais
   const { 
@@ -457,309 +458,150 @@ export default function Transactions() {
     setIsFilterDialogOpen(false);
   };
 
+  // Função para abrir o diálogo apropriado
+  const handleNewTransaction = () => {
+    // Por padrão, abre o diálogo de receita
+    setIsIncomeDialogOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2">
-        <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Transações</h1>
-          <Button 
-            variant="outline" 
-            className="flex items-center gap-2"
-            onClick={() => reloadData()}
-            disabled={isLoading}
-          >
-            <ArrowRightLeft size={16} className={isLoading ? "animate-spin" : ""} />
-            <span>{isLoading ? "Atualizando..." : "Atualizar Dados"}</span>
-          </Button>
-        </div>
+        <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">
+          Transações
+        </h1>
         <p className="text-muted-foreground animate-slide-in-top animation-delay-100">
           Gerencie as receitas e despesas do condomínio
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in">
-        <Tabs defaultValue="all" className="w-full sm:w-auto" onValueChange={setActiveTab}>
-          <TabsList>
+      {/* Tabs e Ações - Layout responsivo */}
+      <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
+        <Tabs value={activeTab} className="w-full sm:w-auto" onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-4 sm:w-auto">
             <TabsTrigger value="all">Todas</TabsTrigger>
             <TabsTrigger value="income" className="flex items-center gap-1">
-              <ArrowDownLeftIcon size={14} />
+              <ArrowDownLeftIcon size={14} className="hidden sm:inline-block" />
               <span>Receitas</span>
             </TabsTrigger>
             <TabsTrigger value="expense" className="flex items-center gap-1">
-              <ArrowUpRightIcon size={14} />
+              <ArrowUpRightIcon size={14} className="hidden sm:inline-block" />
               <span>Despesas</span>
             </TabsTrigger>
             <TabsTrigger value="transfer" className="flex items-center gap-1">
-              <ArrowUpRightIcon size={14} className="rotate-90" />
-              <span>Transferências</span>
-            </TabsTrigger>
-            <TabsTrigger value="pending" className="flex items-center gap-1">
-              <Calendar size={14} />
-              <span>Pendentes</span>
+              <ArrowUpRightIcon size={14} className="hidden sm:inline-block rotate-90" />
+              <span>Transf.</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
 
-        <div className="flex items-center w-full sm:w-auto gap-2">
-          <div className="relative flex-grow">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Buscar transações..."
-              className="pl-9"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-
-          <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="flex items-center gap-2">
-                <Filter size={16} />
-                <span className="hidden sm:inline">Filtrar</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Filtrar Transações</DialogTitle>
-                <DialogDescription>
-                  Defina filtros para encontrar transações específicas.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Data Inicial</Label>
-                    <div className="relative">
-                      <Input type="date" />
-                      <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Data Final</Label>
-                    <div className="relative">
-                      <Input type="date" />
-                      <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Categoria</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todas" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas</SelectItem>
-                        <SelectItem value="taxa">Taxa Condominial</SelectItem>
-                        <SelectItem value="manutencao">Manutenção</SelectItem>
-                        <SelectItem value="agua">Água</SelectItem>
-                        <SelectItem value="energia">Energia</SelectItem>
-                        <SelectItem value="seguranca">Segurança</SelectItem>
-                        <SelectItem value="limpeza">Limpeza</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Conta</Label>
-                    <Select>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Todas" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todas</SelectItem>
-                        {bankAccounts.map(account => (
-                          <SelectItem key={account.id} value={account.id}>
-                            {account.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select
-                    value={statusFilter}
-                    onValueChange={setStatusFilter}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="completed">Concluída</SelectItem>
-                      <SelectItem value="pending">Pendente</SelectItem>
-                      <SelectItem value="cancelled">Cancelada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button 
-                  variant="outline" 
-                  className="w-full sm:w-auto"
-                  onClick={handleClearFilters}
-                >
-                  Limpar
-                </Button>
-                <Button 
-                  type="submit" 
-                  className="w-full sm:w-auto"
-                  onClick={() => setIsFilterDialogOpen(false)}
-                >
-                  Aplicar Filtros
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="flex items-center gap-2">
-                <PlusCircle size={16} />
-                <span>Novo</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem 
-                className="flex items-center gap-2 cursor-pointer"
-                onClick={() => setIsIncomeDialogOpen(true)}
-              >
-                <Download size={16} className="text-emerald-500" />
-                <span>Nova Receita</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                className="flex items-center gap-2 cursor-pointer"
-                onClick={() => setIsExpenseDialogOpen(true)}
-              >
-                <Upload size={16} className="text-red-500" />
-                <span>Nova Despesa</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                className="flex items-center gap-2 cursor-pointer"
-                onClick={() => setIsTransferDialogOpen(true)}
-              >
-                <ArrowUpRightIcon size={16} className="rotate-90 text-indigo-500" />
-                <span>Nova Transferência</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        {/* Botões de ação */}
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="flex-1 sm:flex-none" onClick={() => setIsFilterDialogOpen(true)}>
+            <Filter size={16} className="mr-2" />
+            Filtrar
+          </Button>
+          <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
+            <Download size={16} className="mr-2" />
+            Exportar
+          </Button>
+          <Button 
+            size="sm" 
+            className="flex-1 sm:flex-none"
+            onClick={handleNewTransaction}
+          >
+            <PlusCircle size={16} className="mr-2" />
+            Nova
+          </Button>
         </div>
       </div>
 
-      <div className="rounded-md border animate-fade-in">
+      {/* Barra de pesquisa */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="Buscar transação..."
+          className="pl-10"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
+
+      {/* Tabela responsiva */}
+      <div className="rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Descrição</TableHead>
-              <TableHead>Categoria</TableHead>
-              <TableHead>Data</TableHead>
-              <TableHead>Conta</TableHead>
+              <TableHead className="hidden md:table-cell">Data</TableHead>
+              <TableHead className="hidden sm:table-cell">Categoria</TableHead>
               <TableHead>Valor</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              <TableHead className="hidden lg:table-cell">Status</TableHead>
+              <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredTransactions.length > 0 ? (
-              filteredTransactions.map((transaction) => (
-                <TableRow key={transaction.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9">
-                        <AvatarFallback 
-                          className={`text-xs ${
-                            transaction.type === "income" 
-                              ? "bg-emerald-100 text-emerald-700" 
-                              : transaction.type === "expense"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-indigo-100 text-indigo-700"
-                          }`}
-                        >
-                          {transaction.type === "income" 
-                            ? <ArrowDownLeftIcon size={14} /> 
-                            : transaction.type === "expense"
-                            ? <ArrowUpRightIcon size={14} />
-                            : <ArrowUpRightIcon size={14} className="rotate-90" />
-                          }
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium">{transaction.description}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {transaction.type === "income" && transaction.unit && `Unidade ${transaction.unit}`}
-                          {transaction.type === "expense" && transaction.payee && `Beneficiário: ${transaction.payee}`}
-                          {transaction.type === "transfer" && transaction.to_account && `Para: ${getAccountName(transaction.to_account)}`}
-                        </p>
-                      </div>
+            {filteredTransactions.map((transaction) => (
+              <TableRow key={transaction.id}>
+                <TableCell>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{transaction.description}</span>
+                    {/* Informações extras para mobile */}
+                    <div className="flex flex-col gap-1 sm:hidden">
+                      <span className="text-sm text-muted-foreground">
+                        {formatDate(transaction.date)}
+                      </span>
+                      <Badge variant="outline" className="w-fit">
+                        {transaction.category}
+                      </Badge>
+                      <span className="text-sm">
+                        {getStatusBadge(transaction.status)}
+                      </span>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={getCategoryColor(transaction.category)}>
-                      {transaction.category}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{formatDate(transaction.date)}</TableCell>
-                  <TableCell>{getAccountName(transaction.account)}</TableCell>
-                  <TableCell className={`font-medium ${
-                      transaction.type === "income" 
-                        ? "text-emerald-600" 
-                        : transaction.type === "expense"
-                        ? "text-red-600"
-                      : ""
+                  </div>
+                </TableCell>
+                <TableCell className="hidden md:table-cell">
+                  {formatDate(transaction.date)}
+                </TableCell>
+                <TableCell className="hidden sm:table-cell">
+                  <Badge variant="outline" className={getCategoryColor(transaction.category)}>
+                    {transaction.category}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <span className={`font-medium ${
+                    transaction.type === 'income' ? 'text-emerald-600' : 
+                    transaction.type === 'expense' ? 'text-red-600' : 
+                    'text-indigo-600'
                   }`}>
-                    {getTransactionBadge(transaction.type)}
                     {formatCurrency(transaction.amount)}
-                  </TableCell>
-                  <TableCell>
-                    {getStatusBadge(transaction.status)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal size={16} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem className="flex items-center gap-2">
-                          <Eye size={14} />
-                          <span>Visualizar</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="flex items-center gap-2">
-                          <PencilIcon size={14} />
-                          <span>Editar</span>
-                        </DropdownMenuItem>
-                        {transaction.status === 'pending' && (
-                          <DropdownMenuItem 
-                            className="flex items-center gap-2 text-emerald-600"
-                            onClick={() => confirmPayment(transaction.id)}
-                          >
-                            <CreditCard size={14} />
-                            <span>Confirmar Pagamento</span>
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuItem 
-                          className="flex items-center gap-2 text-red-600"
-                          onClick={() => deleteTransaction(transaction.id)}
-                        >
-                          <Trash2 size={14} />
-                          <span>Excluir</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
-                  Nenhuma transação encontrada.
+                  </span>
+                </TableCell>
+                <TableCell className="hidden lg:table-cell">
+                  {getStatusBadge(transaction.status)}
+                </TableCell>
+                <TableCell>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>
+                        <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        <PencilIcon className="mr-2 h-4 w-4" /> Editar
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-red-600">
+                        <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </TableCell>
               </TableRow>
-            )}
+            ))}
           </TableBody>
         </Table>
       </div>
@@ -1143,6 +985,9 @@ export default function Transactions() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Espaço adicional para evitar sobreposição do menu flutuante */}
+      <div className="h-20" />
     </div>
   );
 }

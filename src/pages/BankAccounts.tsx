@@ -44,6 +44,7 @@ import { validarChavePIX } from "@/lib/validators";
 import { applyPixKeyMask } from "@/lib/masks";
 import { ColorPicker } from "@/components/ui/color-picker";
 import { useBankAccounts, BankAccount } from "@/contexts/BankAccountContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // Function to format currency
 const formatCurrency = (value: number) => {
@@ -438,6 +439,7 @@ export default function BankAccounts() {
   const [activeTab, setActiveTab] = useState("all");
   const [pixKeyError, setPixKeyError] = useState<string | null>(null);
   const [showAllBalances, setShowAllBalances] = useState(false);
+  const isMobile = useIsMobile();
   
   // Usar o contexto em vez de estados locais
   const { 
@@ -467,9 +469,24 @@ export default function BankAccounts() {
   const [transferForm, setTransferForm] = useState({
     fromAccountId: "",
     toAccountId: "",
-    amount: 0,
+    amount: "",  // Mudado de 0 para ""
     description: ""
   });
+
+  // Função de formatação de entrada de número
+  const formatNumberInput = (value: string) => {
+    // Remove tudo que não for número ou vírgula
+    value = value.replace(/[^\d,]/g, '');
+    
+    // Substitui vírgula por ponto para cálculos internos
+    const numericValue = value.replace(',', '.');
+    
+    // Verifica se é um número válido
+    if (!isNaN(parseFloat(numericValue))) {
+      return value;
+    }
+    return '';
+  };
   
   // Ouvir o evento para abrir o diálogo de transferência
   useEffect(() => {
@@ -502,11 +519,22 @@ export default function BankAccounts() {
       return;
     }
     
+    // Garantir que o balance seja um número
+    const balance = typeof newAccount.balance === 'string' 
+      ? parseFloat(newAccount.balance.toString().replace(',', '.')) 
+      : newAccount.balance || 0;
+
     // Preparar dados para salvar
     const accountToSave = {
-      ...newAccount,
-      pixKeyType: newAccount.pixKeyType === "none" ? null : newAccount.pixKeyType,
-      pixKey: newAccount.pixKeyType === "none" ? null : newAccount.pixKey
+      name: newAccount.name.trim(),
+      bank: newAccount.bank.trim(),
+      accountNumber: newAccount.accountNumber.trim(),
+      agency: newAccount.agency.trim(),
+      balance: balance,
+      type: newAccount.type || "checking",
+      color: newAccount.color || "blue",
+      pixKey: newAccount.pixKeyType === "none" ? null : newAccount.pixKey?.trim(),
+      pixKeyType: newAccount.pixKeyType === "none" ? null : newAccount.pixKeyType
     };
     
     // Adicionar conta usando o contexto
@@ -530,48 +558,52 @@ export default function BankAccounts() {
   // Função para realizar a transferência entre contas
   const handleExecuteTransfer = async () => {
     try {
+      // Converter o valor para número (substituindo vírgula por ponto)
+      const amountStr = transferForm.amount.replace(',', '.');
+      const amount = parseFloat(amountStr);
+
       // Validar o formulário
-      if (transferForm.amount <= 0) {
+      if (isNaN(amount) || amount <= 0) {
         toast.error("O valor da transferência deve ser maior que zero");
         return;
       }
-      
+
       if (transferForm.fromAccountId === transferForm.toAccountId) {
         toast.error("As contas de origem e destino devem ser diferentes");
         return;
       }
-      
+
       // Encontrar as contas
       const fromAccount = bankAccounts.find(a => a.id === transferForm.fromAccountId);
       const toAccount = bankAccounts.find(a => a.id === transferForm.toAccountId);
-      
+
       if (!fromAccount || !toAccount) {
         toast.error("Conta não encontrada");
         return;
       }
-      
+
       // Verificar se há saldo suficiente
-      if (fromAccount.balance < transferForm.amount) {
+      if (fromAccount.balance < amount) {
         toast.error("Saldo insuficiente para realizar a transferência");
         return;
       }
-      
+
       // Obter a data atual no formato correto (YYYY-MM-DD)
       const today = new Date();
       const formattedDate = today.toISOString().split('T')[0];
       
-      // Criar a transação
+      // Criar a transação - IMPORTANTE: usar amountStr com ponto decimal
       const transaction = {
         description: transferForm.description || `Transferência de ${fromAccount.name} para ${toAccount.name}`,
-        amount: transferForm.amount,
+        amount: amountStr, // Usar o valor com ponto decimal
         type: "transfer" as const,
         category: "Transferência",
-        account: fromAccount.id.toString(), // Usar o ID da conta em vez do nome
-        to_account: toAccount.id.toString(), // Usar o ID da conta em vez do nome
+        account: fromAccount.id.toString(),
+        to_account: toAccount.id.toString(),
         date: formattedDate,
         status: "completed",
-        payee: toAccount.name, // Adicionar o destinatário
-        unit: "" // Campo obrigatório, mesmo que vazio
+        payee: toAccount.name,
+        unit: ""
       };
       
       // Adicionar a transação usando o contexto
@@ -582,7 +614,7 @@ export default function BankAccounts() {
       setTransferForm({
         fromAccountId: "",
         toAccountId: "",
-        amount: 0,
+        amount: "",
         description: ""
       });
       
@@ -596,6 +628,17 @@ export default function BankAccounts() {
   // Função para alternar a visibilidade de todos os saldos
   const toggleAllBalances = () => {
     setShowAllBalances(!showAllBalances);
+  };
+
+  // Função para gerar a descrição automática
+  const generateTransferDescription = (fromAccountId: string, toAccountId: string) => {
+    const fromAccount = bankAccounts.find(a => a.id === fromAccountId);
+    const toAccount = bankAccounts.find(a => a.id === toAccountId);
+    
+    if (fromAccount && toAccount) {
+      return `Transferência da ${fromAccount.name} para ${toAccount.name}`;
+    }
+    return "";
   };
 
   return (
@@ -612,15 +655,17 @@ export default function BankAccounts() {
               {showAllBalances ? <EyeOff size={16} /> : <Eye size={16} />}
               <span>{showAllBalances ? "Esconder Saldos" : "Mostrar Saldos"}</span>
             </Button>
-            <Button 
-              variant="outline" 
-              className="flex items-center gap-2"
-              onClick={() => reloadData()}
-              disabled={isLoading}
-            >
-              <ArrowRightLeft size={16} className={isLoading ? "animate-spin" : ""} />
-              <span>{isLoading ? "Atualizando..." : "Atualizar Dados"}</span>
-            </Button>
+            {!isMobile && (
+              <Button 
+                variant="outline" 
+                className="flex items-center gap-2"
+                onClick={() => reloadData()}
+                disabled={isLoading}
+              >
+                <ArrowRightLeft size={16} className={isLoading ? "animate-spin" : ""} />
+                <span>{isLoading ? "Atualizando..." : "Atualizar Dados"}</span>
+              </Button>
+            )}
           </div>
         </div>
         <p className="text-muted-foreground">
@@ -833,42 +878,56 @@ export default function BankAccounts() {
       
       {/* Diálogo de Transferência */}
       <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
-              <DialogContent>
-                <DialogHeader>
+        <DialogContent>
+          <DialogHeader>
             <DialogTitle>Transferência entre Contas</DialogTitle>
-                  <DialogDescription>
+            <DialogDescription>
               Transfira valores entre suas contas bancárias.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="space-y-2">
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
               <Label htmlFor="from-account">Conta de Origem</Label>
               <Select 
                 value={transferForm.fromAccountId}
-                onValueChange={(value) => setTransferForm({...transferForm, fromAccountId: value})}
+                onValueChange={(value) => {
+                  const newDescription = generateTransferDescription(value, transferForm.toAccountId);
+                  setTransferForm({
+                    ...transferForm, 
+                    fromAccountId: value,
+                    description: newDescription
+                  });
+                }}
               >
                 <SelectTrigger id="from-account">
                   <SelectValue placeholder="Selecione a conta de origem" />
-                        </SelectTrigger>
-                        <SelectContent>
+                </SelectTrigger>
+                <SelectContent>
                   {bankAccounts.map(account => (
                     <SelectItem key={account.id} value={account.id}>
                       {account.name} - {formatCurrency(account.balance)}
                     </SelectItem>
                   ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="to-account">Conta de Destino</Label>
               <Select 
                 value={transferForm.toAccountId}
-                onValueChange={(value) => setTransferForm({...transferForm, toAccountId: value})}
+                onValueChange={(value) => {
+                  const newDescription = generateTransferDescription(transferForm.fromAccountId, value);
+                  setTransferForm({
+                    ...transferForm, 
+                    toAccountId: value,
+                    description: newDescription
+                  });
+                }}
               >
                 <SelectTrigger id="to-account">
                   <SelectValue placeholder="Selecione a conta de destino" />
-                      </SelectTrigger>
-                      <SelectContent>
+                </SelectTrigger>
+                <SelectContent>
                   {bankAccounts
                     .filter(account => account.id !== transferForm.fromAccountId)
                     .map(account => (
@@ -877,43 +936,52 @@ export default function BankAccounts() {
                       </SelectItem>
                     ))
                   }
-                      </SelectContent>
-                    </Select>
-                  </div>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="transfer-amount">Valor</Label>
               <Input 
                 id="transfer-amount" 
-                type="number" 
+                type="text"  // Mudado de number para text
                 placeholder="0,00" 
-                value={transferForm.amount.toString()}
-                onChange={(e) => setTransferForm({...transferForm, amount: parseFloat(e.target.value) || 0})}
+                value={transferForm.amount}
+                onChange={(e) => {
+                  const formattedValue = formatNumberInput(e.target.value);
+                  setTransferForm({...transferForm, amount: formattedValue});
+                }}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="transfer-description">Descrição (opcional)</Label>
+              <Label htmlFor="transfer-description">Descrição</Label>
               <Input 
                 id="transfer-description" 
-                placeholder="Ex: Transferência para reserva" 
                 value={transferForm.description}
-                onChange={(e) => setTransferForm({...transferForm, description: e.target.value})}
+                readOnly
               />
             </div>
-                </div>
-                <DialogFooter>
+          </div>
+          <DialogFooter>
             <Button variant="outline" onClick={() => setIsTransferDialogOpen(false)}>
               Cancelar
             </Button>
             <Button 
               type="submit" 
               onClick={handleExecuteTransfer}
-              disabled={transferForm.amount <= 0 || transferForm.fromAccountId === transferForm.toAccountId}
+              disabled={
+                !transferForm.amount || 
+                parseFloat(transferForm.amount.replace(',', '.')) <= 0 || 
+                transferForm.fromAccountId === transferForm.toAccountId
+              }
             >
               Transferir
             </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Espaço adicional para evitar sobreposição do menu flutuante */}
+      <div className="h-20" />
     </div>
   );
 }

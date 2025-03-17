@@ -53,7 +53,10 @@ import {
   AlertCircle,
   QrCode,
   Receipt,
-  Building
+  Building,
+  CalendarIcon,
+  UserIcon,
+  HomeIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -348,18 +351,18 @@ const Billing = () => {
           
           result = await updateBillingStatus(confirmAction.id, 'paid');
           if (result.success) {
-            // Atualizar o estado local das cobranças
-            setBillings(prev => 
-              prev.map(b => 
-                b.id === confirmAction.id ? { ...b, status: "paid" } : b
-              )
-            );
+            // Atualizar ambos os estados locais
+            const updateBillingState = (prev: BillingDisplay[]) =>
+              prev.map(b => b.id === confirmAction.id ? { ...b, status: "paid" } : b);
+            
+            setBillings(updateBillingState);
+            setFilteredBillings(updateBillingState);
 
             // Adicionar uma transação e atualizar o saldo da conta
             if (billing) {
               // Adicionar a transação
               addTransaction({
-                id: Date.now(), // ID temporário
+                id: Date.now(),
                 account: defaultAccount.id.toString(),
                 amount: billing.amount,
                 category: 'Receita',
@@ -387,11 +390,12 @@ const Billing = () => {
         case 'send':
           result = await updateBillingFlag(confirmAction.id, 'is_sent', true);
           if (result.success) {
-            setBillings(prev => 
-              prev.map(billing => 
-                billing.id === confirmAction.id ? { ...billing, is_sent: true } : billing
-              )
-            );
+            const updateBillingState = (prev: BillingDisplay[]) =>
+              prev.map(b => b.id === confirmAction.id ? { ...b, is_sent: true } : b);
+            
+            setBillings(updateBillingState);
+            setFilteredBillings(updateBillingState);
+            
             toast.success('Cobrança marcada como enviada');
           } else {
             toast.error('Erro ao marcar cobrança como enviada');
@@ -401,11 +405,12 @@ const Billing = () => {
         case 'print':
           result = await updateBillingFlag(confirmAction.id, 'is_printed', true);
           if (result.success) {
-            setBillings(prev => 
-              prev.map(billing => 
-                billing.id === confirmAction.id ? { ...billing, is_printed: true } : billing
-              )
-            );
+            const updateBillingState = (prev: BillingDisplay[]) =>
+              prev.map(b => b.id === confirmAction.id ? { ...b, is_printed: true } : b);
+            
+            setBillings(updateBillingState);
+            setFilteredBillings(updateBillingState);
+            
             toast.success('Cobrança marcada como impressa');
           } else {
             toast.error('Erro ao marcar cobrança como impressa');
@@ -413,14 +418,55 @@ const Billing = () => {
           break;
           
         case 'cancel':
+          // Buscar a cobrança atual para verificar seu status
+          const billingToCancel = billings.find(b => b.id === confirmAction.id);
+          if (!billingToCancel) {
+            toast.error('Cobrança não encontrada');
+            break;
+          }
+
+          // Se a cobrança estava paga, precisamos reverter o saldo
+          if (billingToCancel.status === 'paid') {
+            // Verificar se há contas bancárias
+            if (bankAccounts.length === 0) {
+              toast.error('Não há contas bancárias cadastradas');
+              break;
+            }
+
+            // Usar a primeira conta como padrão
+            const defaultAccount = bankAccounts[0];
+
+            // Adicionar transação de estorno
+            addTransaction({
+              id: Date.now(),
+              account: defaultAccount.id.toString(),
+              amount: billingToCancel.amount,
+              category: 'Estorno',
+              date: new Date().toISOString().split('T')[0],
+              description: `Estorno por cancelamento de cobrança: ${billingToCancel.description}`,
+              payee: billingToCancel.resident,
+              status: 'completed',
+              type: 'expense',
+              unit: billingToCancel.unit
+            });
+
+            // Atualizar o saldo da conta (subtraindo o valor)
+            updateBankAccount({
+              ...defaultAccount,
+              balance: defaultAccount.balance - billingToCancel.amount
+            });
+          }
+
+          // Atualizar o status da cobrança para cancelado
           result = await updateBillingStatus(confirmAction.id, 'cancelled');
           if (result.success) {
-            setBillings(prev => 
-              prev.map(billing => 
-                billing.id === confirmAction.id ? { ...billing, status: "cancelled" } : billing
-              )
-            );
-            toast.success('Cobrança cancelada');
+            const updateBillingState = (prev: BillingDisplay[]) =>
+              prev.map(b => b.id === confirmAction.id ? { ...b, status: "cancelled" } : b);
+            
+            setBillings(updateBillingState);
+            setFilteredBillings(updateBillingState);
+            
+            toast.success('Cobrança cancelada e saldo atualizado');
           } else {
             toast.error('Erro ao cancelar cobrança');
           }
@@ -737,24 +783,17 @@ const Billing = () => {
   };
 
   return (
-    <div className="container max-w-7xl mx-auto py-6 space-y-6 animate-fade-in">
+    <>
       <div className="flex justify-between items-center">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Cobranças</h1>
-        <p className="text-muted-foreground animate-slide-in-top animation-delay-200">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Cobranças</h1>
+          <p className="text-muted-foreground animate-slide-in-top animation-delay-200">
             Gerencie as cobranças do condomínio.
           </p>
         </div>
-        
-        <div className="flex gap-2">
-          <Button className="gap-2" onClick={() => setIsNewBillingDialogOpen(true)}>
-            <Plus size={16} />
-            <span>Nova Cobrança</span>
-          </Button>
-        </div>
       </div>
 
-      <div className="flex justify-end gap-2">
+      <div className="flex justify-end gap-2 my-4">
         <Dialog open={isSummaryDialogOpen} onOpenChange={setIsSummaryDialogOpen}>
           <DialogTrigger asChild>
             <Button variant="outline" className="gap-2">
@@ -811,7 +850,7 @@ const Billing = () => {
           <DropdownMenuTrigger asChild>
             <Button variant="outline" className="gap-2">
               <Download size={16} />
-              Exportar
+              <span className="hidden sm:inline">Exportar</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -848,33 +887,22 @@ const Billing = () => {
             </CardHeader>
             <CardContent>
               <div className="rounded-md border mt-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Unidade</TableHead>
-                      <TableHead>Morador</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading ? (
+                {/* Tabela Desktop */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
-                          Carregando cobranças...
-                        </TableCell>
+                        <TableHead>Unidade</TableHead>
+                        <TableHead>Morador</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Vencimento</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
-                    ) : filteredBillings.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
-                          Nenhuma cobrança encontrada.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      filteredBillings.map((billing) => (
+                    </TableHeader>
+                    <TableBody>
+                      {filteredBillings.map((billing) => (
                         <TableRow key={billing.id}>
                           <TableCell>{billing.unit}</TableCell>
                           <TableCell>{billing.resident}</TableCell>
@@ -884,11 +912,11 @@ const Billing = () => {
                           <TableCell>
                             <BillingStatusBadge status={billing.status} />
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon">
-                                  <MoreVertical size={16} />
+                                  <MoreVertical className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
@@ -979,10 +1007,144 @@ const Billing = () => {
                             </DropdownMenu>
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Tabela Mobile */}
+                <div className="md:hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredBillings.map((billing) => (
+                        <TableRow key={billing.id}>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <div className="font-medium">{billing.description}</div>
+                              <div className="flex items-center text-sm text-muted-foreground">
+                                <CalendarIcon className="mr-1 h-3 w-3" />
+                                {formatDate(billing.dueDate)}
+                              </div>
+                              <div className="flex items-center text-sm text-muted-foreground">
+                                <UserIcon className="mr-1 h-3 w-3" />
+                                {billing.resident.split(' ')[0]}
+                                <HomeIcon className="ml-2 mr-1 h-3 w-3" />
+                                {billing.unit}
+                              </div>
+                              <div>
+                                <BillingStatusBadge status={billing.status} />
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(billing.amount)}
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem 
+                                  className="cursor-pointer"
+                                  onClick={() => viewBilling(billing.id)}
+                                >
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  <span>Visualizar</span>
+                                </DropdownMenuItem>
+                                
+                                {billing.status !== "paid" && billing.status !== "cancelled" && (
+                                  <DropdownMenuItem 
+                                    className="cursor-pointer"
+                                    onClick={() => showConfirmAction(
+                                      'pay',
+                                      billing.id, 
+                                      'Marcar como Pago', 
+                                      'Tem certeza que deseja marcar esta cobrança como paga?',
+                                      'Marcar como Pago'
+                                    )}
+                                  >
+                                    <CreditCard className="mr-2 h-4 w-4" />
+                                    <span>Marcar como Pago</span>
+                                  </DropdownMenuItem>
+                                )}
+                                
+                                {!billing.is_sent && billing.status !== "cancelled" && (
+                                  <DropdownMenuItem 
+                                    className="cursor-pointer"
+                                    onClick={() => showConfirmAction(
+                                      'send',
+                                      billing.id, 
+                                      'Marcar como Enviado', 
+                                      'Tem certeza que deseja marcar esta cobrança como enviada?',
+                                      'Marcar como Enviado'
+                                    )}
+                                  >
+                                    <Send className="mr-2 h-4 w-4" />
+                                    <span>Marcar como Enviado</span>
+                                  </DropdownMenuItem>
+                                )}
+                                
+                                {!billing.is_printed && billing.status !== "cancelled" && (
+                                  <DropdownMenuItem 
+                                    className="cursor-pointer"
+                                    onClick={() => showConfirmAction(
+                                      'print',
+                                      billing.id, 
+                                      'Marcar como Impresso', 
+                                      'Tem certeza que deseja marcar esta cobrança como impressa?',
+                                      'Marcar como Impresso'
+                                    )}
+                                  >
+                                    <Printer className="mr-2 h-4 w-4" />
+                                    <span>Marcar como Impresso</span>
+                                  </DropdownMenuItem>
+                                )}
+                                
+                                <DropdownMenuItem 
+                                  className="cursor-pointer"
+                                  onClick={() => editBilling(billing.id)}
+                                >
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  <span>Editar</span>
+                                </DropdownMenuItem>
+                                
+                                {billing.status !== "cancelled" && (
+                                  <DropdownMenuSeparator />
+                                )}
+                                
+                                {billing.status !== "cancelled" && (
+                                  <DropdownMenuItem 
+                                    className="cursor-pointer text-destructive"
+                                    onClick={() => showConfirmAction(
+                                      'cancel',
+                                      billing.id, 
+                                      'Cancelar Cobrança', 
+                                      'Tem certeza que deseja cancelar esta cobrança? Esta ação não pode ser desfeita.',
+                                      'Cancelar'
+                                    )}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    <span>Cancelar Cobrança</span>
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1103,7 +1265,10 @@ const Billing = () => {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+
+      {/* Espaço adicional para evitar sobreposição do menu flutuante */}
+      <div className="h-20" />
+    </>
   );
 };
 

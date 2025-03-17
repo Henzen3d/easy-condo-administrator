@@ -358,22 +358,15 @@ const Reports = () => {
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   
   return (
-    <div className="container max-w-7xl mx-auto py-6 space-y-6 animate-fade-in">
+    <>
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold tracking-tight animate-slide-in-top">Relatórios</h1>
         <p className="text-muted-foreground animate-slide-in-top animation-delay-200">
-          Gere relatórios detalhados para acompanhar o desempenho do condomínio.
+          Visualize e exporte relatórios do condomínio.
         </p>
       </div>
 
-      <div className="flex justify-end">
-        <Button className="gap-2" onClick={() => setIsGeneratingReport(true)}>
-          <FileText size={16} />
-          Novo Relatório Personalizado
-        </Button>
-      </div>
-
-      <Card>
+      <Card className="mb-6">
         <CardHeader className="pb-0">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
@@ -425,7 +418,10 @@ const Reports = () => {
           <UnitsReport />
         </TabsContent>
       </Tabs>
-    </div>
+
+      {/* Espaço adicional para evitar sobreposição do menu flutuante */}
+      <div className="h-20" />
+    </>
   );
 };
 
