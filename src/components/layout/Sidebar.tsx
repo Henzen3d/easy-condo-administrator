@@ -75,12 +75,7 @@ export function Sidebar({
       href: "/billing",
     },
     {
-      label: "Faturamento",
-      icon: <FilePlus size={20} />,
-      href: "/billing-generator",
-    },
-    {
-      label: "Gestão de Utilities",
+      label: "Consumos",
       icon: <Gauge size={20} />,
       href: "/utility-management",
     },

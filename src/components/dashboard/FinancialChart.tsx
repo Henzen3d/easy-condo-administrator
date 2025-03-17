@@ -1,31 +1,11 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts";
+import { Transaction } from "@/contexts/BankAccountContext";
 
-// Sample data
-const monthlyData = [
-  { month: "Jan", receitas: 12400, despesas: 10200 },
-  { month: "Fev", receitas: 13100, despesas: 10800 },
-  { month: "Mar", receitas: 13800, despesas: 11200 },
-  { month: "Abr", receitas: 12900, despesas: 11500 },
-  { month: "Mai", receitas: 13200, despesas: 10900 },
-  { month: "Jun", receitas: 14100, despesas: 11300 },
-  { month: "Jul", receitas: 14500, despesas: 12100 },
-  { month: "Ago", receitas: 14200, despesas: 12300 },
-  { month: "Set", receitas: 13800, despesas: 12000 },
-  { month: "Out", receitas: 14300, despesas: 11800 },
-  { month: "Nov", receitas: 14700, despesas: 12200 },
-  { month: "Dez", receitas: 15200, despesas: 12500 },
-];
-
-const expenseCategories = [
-  { name: "Manutenção", valor: 5200 },
-  { name: "Água", valor: 2400 },
-  { name: "Energia", valor: 1800 },
-  { name: "Segurança", valor: 1500 },
-  { name: "Limpeza", valor: 1200 },
-  { name: "Outros", valor: 900 },
-];
+interface ChartProps {
+  transactions: Transaction[];
+}
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -35,7 +15,37 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
-export function FinancialAreaChart() {
+export const FinancialAreaChart = ({ transactions }: ChartProps) => {
+  // Processar transações para gerar dados do gráfico
+  const processTransactions = () => {
+    // Agrupar transações por mês
+    const monthlyData = transactions.reduce((acc, transaction) => {
+      const date = new Date(transaction.date);
+      const monthKey = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+      
+      if (!acc[monthKey]) {
+        acc[monthKey] = { income: 0, expenses: 0 };
+      }
+      
+      if (transaction.type === 'income') {
+        acc[monthKey].income += transaction.amount;
+      } else if (transaction.type === 'expense') {
+        acc[monthKey].expenses += transaction.amount;
+      }
+      
+      return acc;
+    }, {} as Record<string, { income: number; expenses: number }>);
+
+    // Converter para formato do gráfico
+    return Object.entries(monthlyData).map(([month, data]) => ({
+      month,
+      income: data.income,
+      expenses: data.expenses
+    }));
+  };
+
+  const chartData = processTransactions();
+
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
@@ -62,7 +72,7 @@ export function FinancialAreaChart() {
         <div className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
-              data={monthlyData}
+              data={chartData}
               margin={{
                 top: 20,
                 right: 20,
@@ -89,7 +99,7 @@ export function FinancialAreaChart() {
               <Tooltip content={<CustomTooltip />} />
               <Area 
                 type="monotone" 
-                dataKey="receitas" 
+                dataKey="income" 
                 stroke="#10B981" 
                 fillOpacity={1} 
                 fill="url(#colorReceitas)" 
@@ -97,7 +107,7 @@ export function FinancialAreaChart() {
               />
               <Area 
                 type="monotone" 
-                dataKey="despesas" 
+                dataKey="expenses" 
                 stroke="#EF4444" 
                 fillOpacity={1} 
                 fill="url(#colorDespesas)" 
@@ -111,7 +121,25 @@ export function FinancialAreaChart() {
   );
 }
 
-export function ExpenseCategoryChart() {
+export const ExpenseCategoryChart = ({ transactions }: ChartProps) => {
+  // Processar transações para gerar dados do gráfico de categorias
+  const processCategories = () => {
+    const categories = transactions
+      .filter(t => t.type === 'expense')
+      .reduce((acc, transaction) => {
+        const category = transaction.category || 'Outros';
+        acc[category] = (acc[category] || 0) + transaction.amount;
+        return acc;
+      }, {} as Record<string, number>);
+
+    return Object.entries(categories).map(([category, amount]) => ({
+      category,
+      amount
+    }));
+  };
+
+  const chartData = processCategories();
+
   return (
     <Card className="overflow-hidden transition-all hover:shadow-md animate-fade-in animation-delay-200">
       <CardHeader className="pb-2">
@@ -121,7 +149,7 @@ export function ExpenseCategoryChart() {
         <div className="h-[300px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={expenseCategories}
+              data={chartData}
               margin={{
                 top: 20,
                 right: 20,
@@ -130,7 +158,7 @@ export function ExpenseCategoryChart() {
               }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <XAxis dataKey="category" tick={{ fontSize: 12 }} />
               <YAxis 
                 tickFormatter={(value) => `R$${value/1000}k`} 
                 tick={{ fontSize: 12 }}
@@ -146,7 +174,7 @@ export function ExpenseCategoryChart() {
               />
               <Legend />
               <Bar 
-                dataKey="valor" 
+                dataKey="amount" 
                 fill="#0369A1" 
                 radius={[4, 4, 0, 0]} 
                 name="Valor" 

@@ -33,6 +33,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { format } from "date-fns";
+import { pt } from "date-fns/locale";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface Resident {
   id: number;
@@ -59,6 +64,7 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState<number | "">("");
   const [dueDate, setDueDate] = useState("");
+  const [referenceMonth, setReferenceMonth] = useState<Date>(new Date());
   
   const [includeGas, setIncludeGas] = useState(false);
   const [gasPrevious, setGasPrevious] = useState<number | "">("");
@@ -78,6 +84,14 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingUnits, setIsLoadingUnits] = useState(true);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  // Função para manipular a mudança do mês de referência
+  const handleReferenceMonthSelect = (date: Date | undefined) => {
+    if (date) {
+      const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+      setReferenceMonth(firstDayOfMonth);
+    }
+  };
 
   useEffect(() => {
     async function fetchUnitsAndResidents() {
@@ -400,6 +414,11 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
     try {
       setIsLoading(true);
       
+      if (!referenceMonth) {
+        toast.error('Mês de referência é obrigatório');
+        return;
+      }
+      
       // Validação para unidade única
       if (!unitId || !unit || !resident || !description || !dueDate || totalAmount <= 0) {
         toast.error('Por favor, preencha todos os campos obrigatórios');
@@ -459,34 +478,44 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
       const selectedUnitObj = units.find(u => u.id === unitId);
       const unitDisplay = selectedUnitObj ? `${selectedUnitObj.block}${selectedUnitObj.number}` : unit;
       
-      const newBilling: Omit<Billing, 'id'> = {
+      // Extrair o ano e mês de referência
+      const referenceYear = referenceMonth.getFullYear();
+      const referenceMonthNumber = format(referenceMonth, 'MM'); // '03' para março
+      
+      const newBilling = {
         unit: unitDisplay,
         unit_id: unitId,
         resident: resident,
         description: description,
-        amount: totalAmount,
-        due_date: dueDate,
-        status: "pending",
+        amount: Number(totalAmount),
+        due_date: new Date(dueDate).toISOString().split('T')[0],
+        status: "pending" as const,
         is_printed: false,
-        is_sent: false
+        is_sent: false,
+        reference_month: referenceMonthNumber, // Apenas o mês (ex: '03')
+        reference_year: referenceYear, // Ano separado (ex: 2025)
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
       
       console.log("Creating new billing:", newBilling);
-      const { error } = await supabase
+      
+      const { data, error } = await supabase
         .from('billings')
-        .insert([newBilling]);
+        .insert([newBilling])
+        .select();
         
       if (error) {
-        console.error('Error saving billing:', error);
+        console.error('Error details:', error);
         throw error;
-      } else {
-        toast.success("Cobrança criada com sucesso!");
-        if (onSave) onSave();
-        onClose();
       }
+      
+      toast.success("Cobrança criada com sucesso!");
+      if (onSave) onSave();
+      onClose();
     } catch (error) {
-      console.error('Error saving billing:', error);
-      toast.error('Erro ao salvar cobrança');
+      console.error('Error creating billing:', error);
+      toast.error('Erro ao criar cobrança');
     } finally {
       setIsLoading(false);
     }
@@ -550,28 +579,58 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
           </div>
         )}
         
-        <div className="space-y-2">
-          <Label htmlFor="charge-type">Tipo de Cobrança</Label>
-          <Select 
-            value={chargeType}
-            onValueChange={setChargeType}
-            disabled={unit === ALL_UNITS_VALUE}
-          >
-            <SelectTrigger id="charge-type">
-              <SelectValue placeholder="Selecione o tipo de cobrança" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="fixed">Taxa Fixa</SelectItem>
-              <SelectItem value="consumption" disabled={unit === ALL_UNITS_VALUE}>Consumo</SelectItem>
-              <SelectItem value="extra">Taxa Extra</SelectItem>
-              <SelectItem value="custom">Personalizado</SelectItem>
-            </SelectContent>
-          </Select>
-          {unit === ALL_UNITS_VALUE && chargeType === 'fixed' && (
-            <p className="text-xs text-muted-foreground">
-              Cobranças de consumo não estão disponíveis para todas as unidades.
-            </p>
-          )}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="charge-type">Tipo de Cobrança</Label>
+            <Select 
+              value={chargeType}
+              onValueChange={setChargeType}
+              disabled={unit === ALL_UNITS_VALUE}
+            >
+              <SelectTrigger id="charge-type">
+                <SelectValue placeholder="Selecione o tipo de cobrança" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fixed">Taxa Fixa</SelectItem>
+                <SelectItem value="consumption" disabled={unit === ALL_UNITS_VALUE}>Consumo</SelectItem>
+                <SelectItem value="extra">Taxa Extra</SelectItem>
+                <SelectItem value="custom">Personalizado</SelectItem>
+              </SelectContent>
+            </Select>
+            {unit === ALL_UNITS_VALUE && chargeType === 'fixed' && (
+              <p className="text-xs text-muted-foreground">
+                Cobranças de consumo não estão disponíveis para todas as unidades.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label>Mês de Referência</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-left font-normal"
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {format(referenceMonth, "MMMM 'de' yyyy", { locale: pt })}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={referenceMonth}
+                  onSelect={handleReferenceMonthSelect}
+                  initialFocus
+                  locale={pt}
+                  fromMonth={new Date(2023, 0)}
+                  toMonth={new Date(2025, 11)}
+                  disabled={(date) => date.getDate() !== 1}
+                  ISOWeek
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
         
         {chargeType === "fixed" && (
@@ -856,13 +915,32 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="dueDate">Data de Vencimento</Label>
-            <Input 
-              id="dueDate" 
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
+            <Label htmlFor="due-date">Data de Vencimento</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-left font-normal"
+                  id="due-date"
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dueDate ? (
+                    format(new Date(dueDate), "dd 'de' MMMM 'de' yyyy", { locale: pt })
+                  ) : (
+                    <span>Selecione a data</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={dueDate ? new Date(dueDate) : undefined}
+                  onSelect={(date) => date && setDueDate(date.toISOString().split('T')[0])}
+                  initialFocus
+                  locale={pt}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
         

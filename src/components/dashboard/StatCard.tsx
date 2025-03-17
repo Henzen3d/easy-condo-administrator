@@ -30,6 +30,8 @@ export interface StatCardProps extends VariantProps<typeof statCardVariants> {
   trend?: "up" | "down" | "neutral";
   trendValue?: string;
   className?: string;
+  onClick?: () => void;
+  children?: React.ReactNode;
 }
 
 export function StatCard({
@@ -41,6 +43,8 @@ export function StatCard({
   trendValue,
   variant,
   className,
+  onClick,
+  children
 }: StatCardProps) {
   return (
     <Card 
@@ -49,6 +53,8 @@ export function StatCard({
         statCardVariants({ variant }),
         className
       )}
+      onClick={onClick}
+      style={{ cursor: onClick ? 'pointer' : 'default' }}
     >
       <CardContent className="p-6">
         <div className="flex items-center justify-between">
@@ -86,6 +92,12 @@ export function StatCard({
             {icon}
           </div>
         </div>
+        
+        {children && (
+          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            {children}
+          </div>
+        )}
         
         {footer && (
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">

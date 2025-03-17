@@ -3,73 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { ArrowDownLeft, ArrowUpRight, Building, Home, Droplet, Zap, Shield, Trash2, FileText } from "lucide-react";
-
-// Sample data
-const recentTransactions = [
-  {
-    id: 1,
-    description: "Pagamento taxa condominial",
-    amount: 450,
-    type: "income",
-    date: "2023-06-02",
-    category: "taxa",
-    unit: "101",
-  },
-  {
-    id: 2,
-    description: "Manutenção elevador",
-    amount: 1200,
-    type: "expense",
-    date: "2023-06-01",
-    category: "manutenção",
-    payee: "ElevaTech",
-  },
-  {
-    id: 3,
-    description: "Conta de água",
-    amount: 780,
-    type: "expense",
-    date: "2023-05-28",
-    category: "água",
-    payee: "Saneamento Municipal",
-  },
-  {
-    id: 4,
-    description: "Energia elétrica",
-    amount: 550,
-    type: "expense",
-    date: "2023-05-25",
-    category: "energia",
-    payee: "Energia S.A.",
-  },
-  {
-    id: 5,
-    description: "Pagamento taxa condominial",
-    amount: 450,
-    type: "income",
-    date: "2023-05-23",
-    category: "taxa",
-    unit: "204",
-  },
-  {
-    id: 6,
-    description: "Serviço de segurança",
-    amount: 1500,
-    type: "expense",
-    date: "2023-05-20",
-    category: "segurança",
-    payee: "Segurança Total",
-  },
-  {
-    id: 7,
-    description: "Serviço de limpeza",
-    amount: 650,
-    type: "expense",
-    date: "2023-05-15",
-    category: "limpeza",
-    payee: "Clean Service",
-  }
-];
+import { useBankAccounts } from "@/contexts/BankAccountContext";
+import { useNavigate } from "react-router-dom";
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -88,8 +23,8 @@ const formatDate = (dateString: string) => {
 };
 
 const getCategoryIcon = (category: string) => {
-  switch (category) {
-    case "taxa":
+  switch (category.toLowerCase()) {
+    case "taxa condominial":
       return <Home size={16} className="text-emerald-500" />;
     case "manutenção":
       return <Building size={16} className="text-amber-500" />;
@@ -107,21 +42,34 @@ const getCategoryIcon = (category: string) => {
 };
 
 export function RecentTransactions() {
+  const { transactions } = useBankAccounts();
+  const navigate = useNavigate();
+
+  // Ordenar transações por data (mais recentes primeiro)
+  const sortedTransactions = [...transactions].sort((a, b) => 
+    new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+
   return (
-    <Card className="overflow-hidden transition-all hover:shadow-md animate-fade-in animation-delay-300">
+    <Card 
+      className="overflow-hidden transition-all hover:shadow-md animate-fade-in animation-delay-300 cursor-pointer hover:bg-gray-50"
+      onClick={() => navigate('/transactions')}
+    >
       <CardHeader className="pb-2">
         <CardTitle className="text-lg font-medium">Transações Recentes</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {recentTransactions.slice(0, 5).map((transaction) => (
+          {sortedTransactions.slice(0, 5).map((transaction) => (
             <div 
               key={transaction.id} 
               className="flex items-center justify-between rounded-lg p-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
             >
               <div className="flex items-center gap-3">
-                <Avatar className="h-9 w-9 bg-gray-100 dark:bg-gray-800">
-                  {getCategoryIcon(transaction.category)}
+                <Avatar className="h-9 w-9 bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                  <div className="flex items-center justify-center w-full h-full">
+                    {getCategoryIcon(transaction.category)}
+                  </div>
                 </Avatar>
                 <div>
                   <p className="font-medium">{transaction.description}</p>
