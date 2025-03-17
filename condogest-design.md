@@ -1,7 +1,3 @@
-# Welcome to your project
-
-## Project info
-
 # UX/UI para Sistema de Gestão de Condomínios - CondoGest
 
 ## Resumo do Projeto
@@ -238,23 +234,3 @@ CondoGest é um sistema completo para administração de condomínios desenvolvi
   - Cards empilhados verticalmente
   - Tabelas com scroll horizontal ou visualização alternativa
   - Modais em tela cheia
-
-## What technologies are used for this project?
-
-This project is built with .
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/e8908b3c-908e-4cf2-b41b-8a3a589e63e8) and click on Share -> Publish.
-
-## I want to use a custom domain - is that possible?
-
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
-
-Versão 02
