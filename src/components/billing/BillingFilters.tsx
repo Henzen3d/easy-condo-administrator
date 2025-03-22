@@ -91,10 +91,27 @@ const BillingFilters = ({ onApplyFilters }: BillingFiltersProps) => {
     async function loadUnits() {
       setIsLoadingUnits(true);
       try {
+        console.log("BillingFilters: Iniciando carregamento de unidades...");
         const unitsData = await fetchUnits();
-        setUnits(unitsData);
+        console.log("BillingFilters: Unidades carregadas:", unitsData);
+        
+        // Validar se cada unidade tem os dados necessários (id, block, number)
+        const validUnits = unitsData.filter(unit => {
+          const isValid = !!unit.id && (unit.block !== undefined) && !!unit.number;
+          if (!isValid) {
+            console.warn("BillingFilters: Unidade inválida encontrada e será filtrada:", unit);
+          }
+          return isValid;
+        });
+        
+        if (validUnits.length !== unitsData.length) {
+          console.warn(`BillingFilters: ${unitsData.length - validUnits.length} unidades inválidas foram removidas do filtro`);
+        }
+        
+        console.log("BillingFilters: Unidades válidas para filtro:", validUnits);
+        setUnits(validUnits);
       } catch (error) {
-        console.error("Erro ao carregar unidades:", error);
+        console.error("BillingFilters: Erro ao carregar unidades:", error);
       } finally {
         setIsLoadingUnits(false);
       }
@@ -104,6 +121,15 @@ const BillingFilters = ({ onApplyFilters }: BillingFiltersProps) => {
   }, []);
 
   const handleApplyFilters = () => {
+    console.log("BillingFilters: Aplicando filtros:", {
+      status,
+      unit,
+      unitId,
+      resident,
+      startDate,
+      endDate
+    });
+    
     onApplyFilters({
       status,
       unit,
@@ -115,6 +141,7 @@ const BillingFilters = ({ onApplyFilters }: BillingFiltersProps) => {
   };
 
   const handleResetFilters = () => {
+    console.log("BillingFilters: Resetando filtros");
     setStatus("all");
     setUnit("");
     setUnitId("all");
@@ -161,11 +188,21 @@ const BillingFilters = ({ onApplyFilters }: BillingFiltersProps) => {
             <Select 
               value={unitId} 
               onValueChange={(value) => {
+                console.log("BillingFilters: Unidade selecionada:", value);
                 setUnitId(value);
+                
+                if (value === "all") {
+                  setUnit("");
+                  return;
+                }
+                
                 const selectedUnit = units.find(u => u.id.toString() === value);
                 if (selectedUnit) {
-                  setUnit(`${selectedUnit.block}${selectedUnit.number}`);
+                  const unitLabel = `${selectedUnit.block || ''}${selectedUnit.number || ''}`;
+                  console.log("BillingFilters: Nome da unidade selecionada:", unitLabel);
+                  setUnit(unitLabel);
                 } else {
+                  console.warn("BillingFilters: Unidade selecionada não encontrada na lista:", value);
                   setUnit("");
                 }
               }}
@@ -179,7 +216,7 @@ const BillingFilters = ({ onApplyFilters }: BillingFiltersProps) => {
                 <SelectItem value="all">Todas as unidades</SelectItem>
                 {units.map((unit) => (
                   <SelectItem key={unit.id} value={unit.id.toString()}>
-                    {unit.block}{unit.number}
+                    {(unit.block || '') + (unit.number || '')}
                   </SelectItem>
                 ))}
               </SelectContent>

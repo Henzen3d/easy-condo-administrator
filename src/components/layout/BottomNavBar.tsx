@@ -29,89 +29,106 @@ export const BottomNavBar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile(); // Usar o hook useIsMobile
-  const [activeItem, setActiveItem] = useState<string>("/dashboard");
+  const [activeItem, setActiveItem] = useState<string>("dashboard");
 
   // Main navigation items
   const mainNavItems: NavItem[] = [
-    { label: "Dashboard", icon: <Home className="h-5 w-5" />, path: "/dashboard" },
-    { label: "Moradores", icon: <Users className="h-5 w-5" />, path: "/units" },
-    { label: "Contas", icon: <CreditCard className="h-5 w-5" />, path: "/bank-accounts" },
-    { label: "Consumos", icon: <Gauge className="h-5 w-5" />, path: "/utility-management" },
+    { label: "Dashboard", icon: <Home className="h-5 w-5" />, path: "dashboard" },
+    { label: "Moradores", icon: <Users className="h-5 w-5" />, path: "units" },
+    { label: "Contas", icon: <CreditCard className="h-5 w-5" />, path: "bank-accounts" },
+    { label: "Consumos", icon: <Gauge className="h-5 w-5" />, path: "utility-management" },
   ];
 
   // More menu items
   const moreMenuItems: NavItem[] = [
-    { label: "Cobranças", icon: <Receipt className="h-5 w-5" />, path: "/billing" },
-    { label: "Transações", icon: <BarChart4 className="h-5 w-5" />, path: "/transactions" },
-    { label: "Relatórios", icon: <Calendar className="h-5 w-5" />, path: "/reports" },
-    { label: "Configurações", icon: <Settings className="h-5 w-5" />, path: "/settings" },
+    { label: "Cobranças", icon: <Receipt className="h-5 w-5" />, path: "billing" },
+    { label: "Transações", icon: <BarChart4 className="h-5 w-5" />, path: "transactions" },
+    { label: "Relatórios", icon: <Calendar className="h-5 w-5" />, path: "reports" },
+    { label: "Configurações", icon: <Settings className="h-5 w-5" />, path: "settings" },
   ];
 
   useEffect(() => {
-    setActiveItem(location.pathname);
+    // Remover a barra inicial do pathname para comparação
+    const path = location.pathname.startsWith('/') 
+      ? location.pathname.substring(1) 
+      : location.pathname;
+    
+    setActiveItem(path);
   }, [location.pathname]);
+
+  // Para verificar se um item está ativo
+  const isActive = (path: string) => {
+    // O path pode estar com ou sem a barra inicial
+    const currentPath = location.pathname.startsWith('/') 
+      ? location.pathname.substring(1) 
+      : location.pathname;
+    
+    return currentPath === path;
+  };
 
   const handleNavigation = (path: string) => {
     navigate(path);
     setActiveItem(path);
   };
 
-  // Não renderizar na página inicial
-  if (location.pathname === "/") return null;
-
-  // Não renderizar em desktop
-  if (!isMobile) return null;
+  if (!isMobile) {
+    return null;
+  }
 
   return (
-    <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-md bg-background/80 backdrop-blur-sm border rounded-full shadow-lg z-[9999]">
-      <div className="grid h-14 grid-cols-5 items-center">
-        {mainNavItems.map((item) => (
-          <Button
-            key={item.path}
-            variant="ghost"
-            className={`flex h-full w-full flex-col items-center justify-center gap-1 rounded-full ${
-              activeItem === item.path ? "text-primary" : "text-muted-foreground"
-            }`}
-            onClick={() => handleNavigation(item.path)}
-          >
-            {item.icon}
-            <span className="text-[10px]">{item.label}</span>
-          </Button>
-        ))}
+    <div className="fixed bottom-0 left-0 right-0 z-50 flex h-16 items-center justify-around border-t bg-background px-4">
+      {mainNavItems.map((item) => (
+        <Button
+          key={item.path}
+          variant="ghost"
+          size="sm"
+          className={`flex flex-col items-center justify-center space-y-1 h-full w-full max-w-[4.5rem] p-0 ${
+            isActive(item.path) ? "text-primary" : "text-muted-foreground"
+          }`}
+          onClick={() => handleNavigation(item.path)}
+        >
+          {item.icon}
+          <span className="text-xs">{item.label}</span>
+        </Button>
+      ))}
 
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button
-              variant="ghost"
-              className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-full"
-            >
-              <MoreHorizontal className="h-5 w-5" />
-              <span className="text-[10px]">Mais</span>
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent 
-            className="w-48 p-0" 
-            align="end"
-            side="top"
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex flex-col items-center justify-center space-y-1 h-full w-full max-w-[4.5rem] p-0 text-muted-foreground"
           >
-            <div className="flex flex-col">
-              {moreMenuItems.map((item) => (
-                <Button
-                  key={item.path}
-                  variant="ghost"
-                  className={`flex w-full items-center justify-start gap-2 rounded-none px-4 py-2 ${
-                    activeItem === item.path ? "text-primary" : "text-muted-foreground"
-                  }`}
-                  onClick={() => handleNavigation(item.path)}
-                >
-                  {item.icon}
-                  {item.label}
-                </Button>
-              ))}
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>
-    </nav>
+            <MoreHorizontal className="h-5 w-5" />
+            <span className="text-xs">Mais</span>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="center"
+          className="w-[200px] p-2"
+          side="top"
+          sideOffset={15}
+        >
+          <div className="grid grid-cols-2 gap-2">
+            {moreMenuItems.map((item) => (
+              <Button
+                key={item.path}
+                variant="ghost"
+                size="sm"
+                className={`flex h-14 w-full flex-col items-center justify-center space-y-1 p-0 ${
+                  isActive(item.path) ? "text-primary" : "text-muted-foreground"
+                }`}
+                onClick={() => {
+                  handleNavigation(item.path);
+                }}
+              >
+                {item.icon}
+                <span className="text-xs">{item.label}</span>
+              </Button>
+            ))}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 };

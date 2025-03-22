@@ -15,7 +15,15 @@ import {
   ChevronRight,
   X,
   Gauge,
-  FilePlus
+  FilePlus,
+  HomeIcon,
+  BuildingIcon,
+  CreditCardIcon,
+  ListChecksIcon,
+  ArrowRightLeft,
+  BanknoteIcon,
+  BarChart3Icon,
+  FlaskConicalIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -52,37 +60,37 @@ export function Sidebar({
     {
       label: "Dashboard",
       icon: <Home size={20} />,
-      href: "/dashboard",
+      href: "dashboard",
     },
     {
       label: "Unidades & Moradores",
       icon: <Users size={20} />,
-      href: "/units",
+      href: "units",
     },
     {
       label: "Contas Bancárias",
       icon: <CreditCard size={20} />,
-      href: "/bank-accounts",
+      href: "bank-accounts",
     },
     {
       label: "Transações",
       icon: <BarChart4 size={20} />,
-      href: "/transactions",
+      href: "transactions",
     },
     {
       label: "Cobranças",
       icon: <Receipt size={20} />,
-      href: "/billing",
+      href: "billing",
     },
     {
       label: "Consumos",
       icon: <Gauge size={20} />,
-      href: "/utility-management",
+      href: "utility-management",
     },
     {
       label: "Relatórios",
       icon: <Calendar size={20} />,
-      href: "/reports",
+      href: "reports",
     },
   ];
 
@@ -90,129 +98,187 @@ export function Sidebar({
   const footerItem: NavItem = {
     label: "Configurações",
     icon: <Settings size={20} />,
-    href: "/settings",
+    href: "settings",
   };
 
-  // For mobile view
+  // Determine if a nav item is active
+  const isActive = (href: string) => {
+    // Match the current pathname with the nav item's href
+    return location.pathname === href || location.pathname === `/${href}`;
+  };
+
+  // Monitor for hover events only on non-mobile
   useEffect(() => {
-    if (isMobile && isMobileOpen) {
-      // Close sidebar on route change for mobile
-      return () => {
-        if (onMobileClose) onMobileClose();
-      };
+    if (isMobile) {
+      setIsHovering(false);
     }
-  }, [location.pathname, isMobile, isMobileOpen, onMobileClose]);
-
-  // Determine if sidebar should be shown
-  const showSidebar = isMobile ? isMobileOpen : true;
-  // Determine if sidebar is in a collapsed visual state
-  const isCollapsed = collapsed && !isHovering;
-
-  if (!showSidebar && isMobile) return null;
+  }, [isMobile]);
 
   return (
-    <aside
-      className={cn(
-        "fixed inset-y-0 left-0 z-30 flex h-full flex-col border-r bg-white shadow-sm transition-all duration-300 ease-in-out dark:bg-gray-900",
-        isCollapsed ? "w-16" : "w-64",
-        isMobile && "shadow-lg",
-        className
-      )}
-      onMouseEnter={() => !isMobile && setIsHovering(true)}
-      onMouseLeave={() => !isMobile && setIsHovering(false)}
-    >
-      {/* Logo and collapse button */}
-      <div className="flex items-center p-4 justify-between">
-        <div className="flex items-center">
-          <Logo showText={!isCollapsed} size={isCollapsed ? "sm" : "md"} />
-        </div>
-        
-        {isMobile ? (
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={onMobileClose}
-            className="ml-auto"
-            aria-label="Close menu"
-          >
-            <X size={20} />
-          </Button>
-        ) : (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onToggleCollapse}
-            className={cn(
-              "ml-2 transition-opacity",
-              isCollapsed && "rotate-180"
-            )}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          </Button>
+    <>
+      {/* Desktop sidebar */}
+      <aside
+        className={cn(
+          "fixed top-0 left-0 z-30 h-full border-r bg-background transition-all duration-300 ease-in-out",
+          collapsed && !isHovering ? "w-16" : "w-64",
+          isMobile && "hidden",
+          className
         )}
-      </div>
-      
-      {/* Navigation items */}
-      <div className="mt-6 flex flex-1 flex-col gap-1 px-3">
-        <TooltipProvider delayDuration={0}>
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.href;
-            return (
-              <Tooltip key={item.href} delayDuration={400} disableHoverableContent={!isCollapsed}>
-                <TooltipTrigger asChild>
-                  <Link to={item.href} onClick={isMobile ? onMobileClose : undefined}>
-                    <Button
-                      variant={isActive ? "default" : "ghost"}
-                      size={isCollapsed ? "icon" : "default"}
-                      className={cn(
-                        "w-full justify-start transition-all",
-                        isActive ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                      )}
-                    >
-                      <span className={cn("shrink-0", isCollapsed ? "" : "mr-2")}>{item.icon}</span>
-                      {!isCollapsed && <span className="truncate">{item.label}</span>}
-                    </Button>
-                  </Link>
-                </TooltipTrigger>
-                {isCollapsed && (
-                  <TooltipContent side="right" className="z-50">
-                    {item.label}
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            );
-          })}
-        </TooltipProvider>
-      </div>
+        onMouseEnter={() => collapsed && setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
+      >
+        <div className="flex h-full flex-col">
+          {/* Sidebar header */}
+          <div className="flex h-16 items-center justify-between px-4">
+            <Link to="/" className="flex items-center gap-2">
+              <Logo 
+                className="h-8" 
+                showText={!collapsed || isHovering} 
+              />
+            </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggleCollapse}
+              className={cn(
+                "transition-all",
+                collapsed && !isHovering ? "ml-auto" : ""
+              )}
+            >
+              {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </Button>
+          </div>
 
-      {/* Sidebar footer with Settings */}
-      <div className="mt-auto border-t px-3 py-4">
-        <TooltipProvider delayDuration={0}>
-          <Tooltip delayDuration={400} disableHoverableContent={!isCollapsed}>
-            <TooltipTrigger asChild>
-              <Link to={footerItem.href} onClick={isMobile ? onMobileClose : undefined}>
-                <Button
-                  variant={location.pathname === footerItem.href ? "default" : "ghost"}
-                  size={isCollapsed ? "icon" : "default"}
+          {/* Nav items */}
+          <nav className="flex-1 overflow-y-auto py-4">
+            <ul className="space-y-1 px-2">
+              {navItems.map((item) => (
+                <li key={item.href}>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link
+                          to={item.href}
+                          className={cn(
+                            "flex items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-accent/50",
+                            isActive(item.href) && "bg-accent text-accent-foreground hover:bg-accent",
+                            collapsed && !isHovering ? "justify-center" : ""
+                          )}
+                        >
+                          {item.icon}
+                          {(!collapsed || isHovering) && (
+                            <span>{item.label}</span>
+                          )}
+                        </Link>
+                      </TooltipTrigger>
+                      {collapsed && !isHovering && (
+                        <TooltipContent side="right">
+                          {item.label}
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          {/* Footer nav */}
+          <div className="border-t py-4">
+            <ul className="px-2">
+              <li>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Link
+                        to={footerItem.href}
+                        className={cn(
+                          "flex items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-accent/50",
+                          isActive(footerItem.href) && "bg-accent text-accent-foreground hover:bg-accent",
+                          collapsed && !isHovering ? "justify-center" : ""
+                        )}
+                      >
+                        {footerItem.icon}
+                        {(!collapsed || isHovering) && (
+                          <span>{footerItem.label}</span>
+                        )}
+                      </Link>
+                    </TooltipTrigger>
+                    {collapsed && !isHovering && (
+                      <TooltipContent side="right">
+                        {footerItem.label}
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile sidebar (slide-in) */}
+      <aside
+        className={cn(
+          "fixed top-0 left-0 z-40 h-full w-64 border-r bg-background transition-transform duration-300 ease-in-out",
+          !isMobileOpen && "-translate-x-full",
+          !isMobile && "hidden"
+        )}
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex h-16 items-center justify-between px-4">
+            <Link to="/" className="flex items-center gap-2" onClick={onMobileClose}>
+              <Logo className="h-8" showText={true} />
+            </Link>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onMobileClose}
+              aria-label="Close sidebar"
+            >
+              <X size={16} />
+            </Button>
+          </div>
+
+          <nav className="flex-1 overflow-y-auto py-4">
+            <ul className="space-y-1 px-2">
+              {navItems.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    to={item.href}
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-accent/50",
+                      isActive(item.href) && "bg-accent text-accent-foreground hover:bg-accent"
+                    )}
+                    onClick={onMobileClose}
+                  >
+                    {item.icon}
+                    <span>{item.label}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <div className="border-t py-4">
+            <ul className="px-2">
+              <li>
+                <Link
+                  to={footerItem.href}
                   className={cn(
-                    "w-full justify-start transition-all",
-                    location.pathname === footerItem.href ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                    "flex items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-accent/50",
+                    isActive(footerItem.href) && "bg-accent text-accent-foreground hover:bg-accent"
                   )}
+                  onClick={onMobileClose}
                 >
-                  <span className={cn("shrink-0", isCollapsed ? "" : "mr-2")}>{footerItem.icon}</span>
-                  {!isCollapsed && <span>{footerItem.label}</span>}
-                </Button>
-              </Link>
-            </TooltipTrigger>
-            {isCollapsed && (
-              <TooltipContent side="right" className="z-50">
-                {footerItem.label}
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-    </aside>
+                  {footerItem.icon}
+                  <span>{footerItem.label}</span>
+                </Link>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }

@@ -189,29 +189,45 @@ const NewBillingForm = ({ onClose, onSave }: NewBillingFormProps) => {
   useEffect(() => {
     async function fetchPreviousReadings() {
       if (!unitId) return;
-      console.log("Fetching previous readings for unit ID:", unitId);
+      console.log("[NewBillingForm] Iniciando busca de leituras anteriores para unidade ID:", unitId);
       
       if (includeGas) {
-        const latestGasReading = await getLatestMeterReading(unitId, 'gas');
-        console.log("Latest gas reading:", latestGasReading);
-        if (latestGasReading) {
-          setGasPrevious(latestGasReading.reading_value);
-          setIsInitialGasReading(false);
-        } else {
-          setGasPrevious("");
-          setIsInitialGasReading(true);
+        console.log("[NewBillingForm] Buscando leitura de gás atualizada do Supabase");
+        try {
+          const latestGasReading = await getLatestMeterReading(unitId, 'gas');
+          console.log("[NewBillingForm] Resposta da busca de leitura de gás:", latestGasReading);
+          
+          if (latestGasReading) {
+            console.log(`[NewBillingForm] Atribuindo valor de leitura anterior de gás: ${latestGasReading.reading_value}`);
+            setGasPrevious(latestGasReading.reading_value);
+            setIsInitialGasReading(false);
+          } else {
+            console.log("[NewBillingForm] Nenhuma leitura de gás encontrada, configurando para leitura inicial");
+            setGasPrevious("");
+            setIsInitialGasReading(true);
+          }
+        } catch (error) {
+          console.error("[NewBillingForm] Erro ao buscar leitura de gás:", error);
         }
       }
       
       if (includeWater) {
-        const latestWaterReading = await getLatestMeterReading(unitId, 'water');
-        console.log("Latest water reading:", latestWaterReading);
-        if (latestWaterReading) {
-          setWaterPrevious(latestWaterReading.reading_value);
-          setIsInitialWaterReading(false);
-        } else {
-          setWaterPrevious("");
-          setIsInitialWaterReading(true);
+        console.log("[NewBillingForm] Buscando leitura de água atualizada do Supabase");
+        try {
+          const latestWaterReading = await getLatestMeterReading(unitId, 'water');
+          console.log("[NewBillingForm] Resposta da busca de leitura de água:", latestWaterReading);
+          
+          if (latestWaterReading) {
+            console.log(`[NewBillingForm] Atribuindo valor de leitura anterior de água: ${latestWaterReading.reading_value}`);
+            setWaterPrevious(latestWaterReading.reading_value);
+            setIsInitialWaterReading(false);
+          } else {
+            console.log("[NewBillingForm] Nenhuma leitura de água encontrada, configurando para leitura inicial");
+            setWaterPrevious("");
+            setIsInitialWaterReading(true);
+          }
+        } catch (error) {
+          console.error("[NewBillingForm] Erro ao buscar leitura de água:", error);
         }
       }
     }

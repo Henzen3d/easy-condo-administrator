@@ -1,4 +1,3 @@
-
 import { Building } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,10 +23,10 @@ export function Logo({ className, size = "md", showText = true }: LogoProps) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <div className="bg-primary-600 text-white p-1.5 rounded-md flex items-center justify-center">
-        <Building size={iconSizes[size]} className="animate-bounce-subtle" />
+        <Building size={iconSizes[size]} />
       </div>
       {showText && (
-        <span className={cn("font-semibold tracking-tight", sizeClasses[size])}>
+        <span className={cn("font-semibold tracking-tight whitespace-nowrap", sizeClasses[size])}>
           <span className="text-primary-600">Condo</span>
           <span className="text-gray-800 dark:text-gray-200">Admin</span>
         </span>

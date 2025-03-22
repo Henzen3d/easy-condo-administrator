@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,6 +94,12 @@ export default function UtilityRatesForm() {
 
     setLoading(true);
     try {
+      console.log("Iniciando salvamento de nova taxa com os dados:", {
+        utility_type: newRate.utility_type,
+        rate_per_cubic_meter: parseFloat(newRate.rate_per_cubic_meter),
+        effective_date: newRate.effective_date
+      });
+      
       const { data, error } = await supabase
         .from('utility_rates')
         .insert([{
@@ -104,8 +109,13 @@ export default function UtilityRatesForm() {
         }])
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro detalhado ao salvar taxa:", error);
+        throw error;
+      }
 
+      console.log("Taxa salva com sucesso no Supabase:", data);
+      
       toast({
         title: "Taxa atualizada com sucesso",
         description: `A nova taxa de ${newRate.utility_type === 'gas' ? 'gás' : 'água'} foi cadastrada.`
@@ -117,6 +127,8 @@ export default function UtilityRatesForm() {
           ...data[0],
           utility_type: data[0].utility_type as "gas" | "water"
         };
+        
+        console.log(`Atualizando estado local da taxa de ${newRate.utility_type} para:`, rateData);
         
         if (newRate.utility_type === 'gas') {
           setGasRate(rateData);
@@ -132,7 +144,8 @@ export default function UtilityRatesForm() {
       });
 
       // Reload rates to ensure we have the latest data
-      loadLatestRates();
+      console.log("Recarregando taxas após salvamento...");
+      await loadLatestRates();
     } catch (error) {
       console.error("Error saving rate:", error);
       toast({

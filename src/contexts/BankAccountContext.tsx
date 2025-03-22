@@ -4,13 +4,13 @@ import { toast } from 'sonner';
 
 // Definição de interfaces
 export interface BankAccount {
-  id: string | number;
+  id: string;
   name: string;
   bank: string;
   accountNumber: string;
   agency: string;
   balance: number;
-  type: "checking" | "savings" | "investment";
+  type: "checking" | "savings";  // Garante que type só pode ter esses dois valores
   color: string;
   pixKey?: string | null;
   pixKeyType?: string | null;
@@ -111,6 +111,7 @@ interface BankAccountContextType {
   getBankAccountById: (id: string) => BankAccount | undefined;
   reloadData: () => Promise<void>;
   isLoading: boolean;
+  fetchBanks: () => Promise<{ code: string; name: string }[]>;
 }
 
 // Criação do contexto
@@ -177,7 +178,7 @@ export const BankAccountProvider: React.FC<{ children: ReactNode }> = ({ childre
           accountNumber: account.account_number,
           agency: account.agency,
           balance: account.balance,
-          type: account.type,
+          type: account.account_type || account.type, // Check for account_type first, fallback to type
           color: account.color || 'blue',
           pixKey: account.pix_key,
           pixKeyType: account.pix_key_type
@@ -253,27 +254,22 @@ export const BankAccountProvider: React.FC<{ children: ReactNode }> = ({ childre
   // Função para adicionar uma nova conta bancária
   const addBankAccount = async (account: Omit<BankAccount, 'id'>) => {
     try {
-      // Garantir que o balance seja um número
-      const balance = typeof account.balance === 'string' 
-        ? parseFloat(account.balance.toString().replace(',', '.')) 
-        : account.balance || 0;
-
+      console.log('Adding new bank account:', account);
+      
       // Preparar os dados para o Supabase
       const supabaseData = {
         name: account.name,
         bank: account.bank,
         account_number: account.accountNumber,
         agency: account.agency,
-        balance: balance,
-        account_type: account.type || "checking", // Alterado de 'type' para 'account_type'
-        color: account.color || "blue",
-        pix_key: account.pixKey || null,
-        pix_key_type: account.pixKeyType || null
+        balance: account.balance,
+        account_type: account.type, // Use account_type instead of type
+        color: account.color,
+        pix_key: account.pixKey,
+        pix_key_type: account.pixKeyType
       };
       
-      console.log('Dados sendo enviados para o Supabase:', supabaseData);
-
-      // Inserir no Supabase
+      // Adicionar ao Supabase
       const { data, error } = await supabase
         .from('bank_accounts')
         .insert([supabaseData])
@@ -313,6 +309,8 @@ export const BankAccountProvider: React.FC<{ children: ReactNode }> = ({ childre
   // Função para atualizar uma conta bancária existente
   const updateBankAccount = async (account: BankAccount) => {
     try {
+      console.log('Updating bank account with data:', account);
+      
       // Preparar os dados para o Supabase
       const supabaseData = {
         name: account.name,
@@ -320,23 +318,28 @@ export const BankAccountProvider: React.FC<{ children: ReactNode }> = ({ childre
         account_number: account.accountNumber,
         agency: account.agency,
         balance: account.balance,
-        type: account.type,
+        account_type: account.type, // Use account_type instead of type
         color: account.color,
         pix_key: account.pixKey,
         pix_key_type: account.pixKeyType
       };
       
+      console.log('Sending to Supabase:', supabaseData);
+      
       // Atualizar no Supabase
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('bank_accounts')
         .update(supabaseData)
-        .eq('id', account.id);
+        .eq('id', account.id)
+        .select();
         
       if (error) {
         console.error('Error updating bank account:', error);
         toast.error('Erro ao atualizar conta bancária');
         return;
       }
+      
+      console.log('Supabase response:', data);
       
       // Atualizar o estado local
       setBankAccounts(prev => 
@@ -384,7 +387,7 @@ export const BankAccountProvider: React.FC<{ children: ReactNode }> = ({ childre
       
       // Converter o valor para número com ponto decimal
       const amount = typeof transaction.amount === 'string' ? 
-        parseFloat(transaction.amount.replace(',', '.')) : 
+        parseFloat((transaction.amount as string).replace(',', '.')) : 
         transaction.amount;
 
       // Preparar os dados para o Supabase
@@ -769,6 +772,78 @@ export const BankAccountProvider: React.FC<{ children: ReactNode }> = ({ childre
     return bankAccounts.find(account => account.id === id);
   };
 
+  // Função para buscar a lista de bancos no Supabase
+  const fetchBanks = async (): Promise<{ code: string; name: string }[]> => {
+    try {
+      // Primeiro, vamos tentar verificar a estrutura da tabela
+      const { data: columns, error: columnsError } = await supabase
+        .from('banks')
+        .select('*')
+        .limit(1);
+      
+      // Se der erro ou não existir, vamos para os bancos padrão
+      if (columnsError || !columns || columns.length === 0) {
+        console.log('Tabela banks não encontrada ou vazia, usando lista padrão');
+        return getFallbackBanks();
+      }
+      
+      // Verifica quais colunas existem na tabela
+      const sampleBank = columns[0];
+      const codeColumn = 'COMP' in sampleBank ? 'COMP' : 
+                         'Code' in sampleBank ? 'Code' : 
+                         'code' in sampleBank ? 'code' : 'id';
+      
+      const nameColumn = 'ShortName' in sampleBank ? 'ShortName' : 
+                         'Name' in sampleBank ? 'Name' : 
+                         'name' in sampleBank ? 'name' : 
+                         'short_name' in sampleBank ? 'short_name' : 'description';
+      
+      console.log(`Usando colunas: ${codeColumn} (código) e ${nameColumn} (nome)`);
+      
+      // Usar as colunas detectadas na consulta principal
+      const { data, error } = await supabase
+        .from('banks')
+        .select(`${codeColumn}, ${nameColumn}`)
+        .order(nameColumn)
+        .limit(1000);
+      
+      if (error) {
+        console.error('Erro ao buscar bancos:', error);
+        return getFallbackBanks();
+      }
+      
+      console.log(`Número de bancos encontrados: ${data?.length || 0}`);
+      
+      if (!data || data.length === 0) {
+        return getFallbackBanks();
+      }
+      
+      return data.map(bank => ({
+        code: bank[codeColumn]?.toString() || '',
+        name: bank[nameColumn]?.toString() || ''
+      }));
+    } catch (error) {
+      console.error('Erro ao buscar bancos:', error);
+      return getFallbackBanks();
+    }
+  };
+  
+  // Função para fornecer uma lista padrão de bancos em caso de falha
+  const getFallbackBanks = (): { code: string; name: string }[] => {
+    return [
+      { code: "0001", name: "BANCO DO BRASIL S.A." },
+      { code: "0341", name: "ITAU UNIBANCO S.A." },
+      { code: "0033", name: "BANCO SANTANDER S.A." },
+      { code: "0104", name: "CAIXA ECONOMICA FEDERAL" },
+      { code: "0237", name: "BRADESCO S.A." },
+      { code: "0260", name: "NU PAGAMENTOS S.A." },
+      { code: "0077", name: "BANCO INTER S.A." },
+      { code: "0336", name: "BANCO C6 S.A." },
+      { code: "0380", name: "PICPAY SERVICOS S.A." },
+      { code: "0290", name: "PAGSEGURO INTERNET S.A." }
+    ];
+  };
+
   return (
     <BankAccountContext.Provider
       value={{
@@ -784,7 +859,8 @@ export const BankAccountProvider: React.FC<{ children: ReactNode }> = ({ childre
         getBankAccountByName,
         getBankAccountById,
         reloadData,
-        isLoading
+        isLoading,
+        fetchBanks
       }}
     >
       {children}
