@@ -1,0 +1,6 @@
+import{c as d,r,j as s,o as l,ab as c}from"./index-PF3D36V0.js";/**
+ * @license lucide-react v0.462.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const u=d("CircleCheck",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m9 12 2 2 4-4",key:"dzmm74"}]]),o=c("relative w-full rounded-lg border p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground",{variants:{variant:{default:"bg-background text-foreground",destructive:"border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive"}},defaultVariants:{variant:"default"}}),n=r.forwardRef(({className:e,variant:t,...a},i)=>s.jsx("div",{ref:i,role:"alert",className:l(o({variant:t}),e),...a}));n.displayName="Alert";const v=r.forwardRef(({className:e,...t},a)=>s.jsx("h5",{ref:a,className:l("mb-1 font-medium leading-none tracking-tight",e),...t}));v.displayName="AlertTitle";const g=r.forwardRef(({className:e,...t},a)=>s.jsx("div",{ref:a,className:l("text-sm [&_p]:leading-relaxed",e),...t}));g.displayName="AlertDescription";export{n as A,u as C,g as a,v as b};

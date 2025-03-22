@@ -1,0 +1,83 @@
+{
+  "project": {
+    "name": "CondoGest",
+    "version": "1.0.0",
+    "description": "Sistema de gestão de condomínios",
+    "technologies": [
+      "Vite",
+      "TypeScript",
+      "React",
+      "shadcn-ui",
+      "Tailwind CSS",
+      "Supabase"
+    ]
+  },
+  "structure": {
+    "components": {
+      "layout": [
+        "Header",
+        "Sidebar",
+        "BottomNavBar",
+        "Layout"
+      ],
+      "ui": {
+        "base": [
+          "Button",
+          "Input",
+          "Table"
+        ],
+        "complex": [
+          "DataTable",
+          "Form",
+          "Modal"
+        ]
+      }
+    },
+    "hooks": [
+      "useMobile",
+      "useBillingForm"
+    ],
+    "contexts": [
+      "BankAccountContext"
+    ]
+  },
+  "style": {
+    "colors": {
+      "primary": "#007bff",
+      "secondary": "#6c757d",
+      "success": "#28a745",
+      "danger": "#dc3545"
+    },
+    "typography": {
+      "fontFamily": "Inter",
+      "baseSize": "16px",
+      "scale": {
+        "h1": "2.5rem",
+        "h2": "2rem",
+        "h3": "1.75rem"
+      }
+    }
+  },
+  "extensions": {
+    "customComponents": [
+      "BillingGenerator",
+      "FinancialChart",
+      "UtilityManagement"
+    ],
+    "apiEndpoints": {
+      "baseUrl": "https://api.condogest.com",
+      "auth": "/auth",
+      "billing": "/billing",
+      "utilities": "/utilities"
+    }
+  },
+  "examples": {
+    "componentUsage": {
+      "Button": "import { Button } from '@/components/ui/button'",
+      "Form": "import { Form } from '@/components/ui/form'"
+    },
+    "apiCalls": {
+      "getBilling": "fetch('/api/billing')"
+    }
+  }
+}

@@ -59,7 +59,7 @@ CondoGest é um sistema completo para administração de condomínios desenvolvi
 **Barra Lateral**:
 - Retrátil/expansível via botão de toggle
 - Em modo retraído, mostra apenas ícones
-- Em telas pequenas, converte-se para navegação por abas (estilo Spotify)
+- Em telas pequenas, converte-se para navegação por navbar flutuante (estilo Spotify)
 - Logo do aplicativo no topo
 - Links principais:
   1. Dashboard (home)
@@ -68,7 +68,7 @@ CondoGest é um sistema completo para administração de condomínios desenvolvi
   4. Contas Bancárias
   5. Cobranças
 - Menu "Mais" (três pontos) para acessar:
-  - Gestão de Utilities
+  - Consumos
   - Configurações
   - Relatórios
 
@@ -158,7 +158,7 @@ CondoGest é um sistema completo para administração de condomínios desenvolvi
   - Status (Pendente, Pago, Atrasado)
   - Ações
 
-### Gestão de Utilities
+### Consumos
 
 - Seção de configuração de taxas:
   - Valor do m³ de água

@@ -64,7 +64,7 @@ CondoGest é um sistema completo para administração de condomínios desenvolvi
   4. Contas Bancárias
   5. Cobranças
 - Menu "Mais" (três pontos) para acessar:
-  - Gestão de Utilities
+  - Consumos
   - Configurações
   - Relatórios
 
