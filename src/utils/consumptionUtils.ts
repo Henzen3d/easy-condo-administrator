@@ -117,7 +117,39 @@ export async function fetchUnits(): Promise<Unit[]> {
       return [];
     }
     
-    console.log("Units fetched:", data);
+    // Log detailed information about fetched units
+    console.log(`Units fetched: ${data?.length || 0} total units`);
+    console.log('Raw units data from database:', JSON.stringify(data, null, 2));
+    
+    // Check for potential data issues or unexpected values
+    if (data && data.length > 0) {
+      // Log each unit's ID, number and block for debugging
+      data.forEach((unit, index) => {
+        console.log(`Unit ${index + 1}: ID=${unit.id}, Block=${unit.block || 'N/A'}, Number=${unit.number || 'N/A'}`);
+      });
+      
+      // Check for units with missing values
+      const unitsWithMissingValues = data.filter(unit => !unit.id || !unit.number || !unit.block);
+      if (unitsWithMissingValues.length > 0) {
+        console.warn('Found units with missing critical values:', unitsWithMissingValues);
+      }
+      
+      // Check for potential duplicate unit identifiers
+      const unitIdentifiers = new Set();
+      const duplicateUnits = data.filter(unit => {
+        const identifier = `${unit.block}${unit.number}`;
+        if (unitIdentifiers.has(identifier)) {
+          return true;
+        }
+        unitIdentifiers.add(identifier);
+        return false;
+      });
+      
+      if (duplicateUnits.length > 0) {
+        console.warn('Found potential duplicate units:', duplicateUnits);
+      }
+    }
+    
     return data || [];
   } catch (error) {
     console.error('Exception while fetching units:', error);

@@ -1,4 +1,3 @@
-
 export interface UtilityRate {
   id: number;
   utility_type: 'gas' | 'water';
@@ -33,15 +32,16 @@ export interface ConsumptionBill {
   id: number;
   unit_id: number;
   utility_type: 'gas' | 'water';
-  previous_reading_id?: number;
-  current_reading_id?: number;
-  consumption_amount: number;
-  rate_used: number;
+  previous_reading_id: number;
+  current_reading_id: number;
+  consumption: number;
+  rate_per_cubic_meter: number;
   total_amount: number;
-  billing_date: string;
-  billing_period_start: string;
-  billing_period_end: string;
+  reference_month: number;
+  reference_year: number;
   status: 'pending' | 'paid' | 'overdue';
+  due_date: string;
+  paid_at?: string;
   created_at?: string;
   updated_at?: string;
 }

@@ -132,6 +132,7 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
         invoiceData.total,
         transactionId,
         invoiceData.beneficiaryName,
+        invoiceData.city || 'BRASIL',
         description
       );
       
@@ -147,7 +148,22 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
         pdf.setFont('helvetica', 'normal');
         pdf.text('Use o aplicativo do seu banco para', 70, finalY + 38);
         pdf.text('pagar via PIX usando este QR Code.', 70, finalY + 46);
-        pdf.text(`Chave PIX: ${formatPixKeyForDisplay(invoiceData.pixKey)}`, 70, finalY + 56);
+        
+        // Exibir tipo da chave PIX e chave formatada
+        const { identifyPixKeyType, formatPixKey } = require('./pixUtils');
+        const pixKeyType = identifyPixKeyType(invoiceData.pixKey);
+        const formattedPixKey = formatPixKey(invoiceData.pixKey);
+        
+        const pixKeyTypeStr = {
+          'cpf': 'CPF',
+          'cnpj': 'CNPJ',
+          'email': 'E-mail',
+          'phone': 'Telefone',
+          'random': 'Chave Aleatória'
+        }[pixKeyType] || 'Chave PIX';
+        
+        pdf.text(`Tipo de Chave: ${pixKeyTypeStr}`, 70, finalY + 56);
+        pdf.text(`Chave PIX: ${formattedPixKey}`, 70, finalY + 64);
       }
     } catch (error) {
       console.error('Error adding QR code to PDF:', error);
@@ -167,29 +183,9 @@ export const generateInvoicePDF = async (invoiceData: InvoiceData): Promise<Blob
 function formatPixKeyForDisplay(pixKey: string): string {
   if (!pixKey) return '';
   
-  // Format based on apparent type
-  if (pixKey.includes('@')) {
-    return pixKey; // Email
-  } else if (pixKey.length === 11 && /^\d+$/.test(pixKey)) {
-    // CPF format: 123.456.789-00
-    return pixKey.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-  } else if (pixKey.length === 14 && /^\d+$/.test(pixKey)) {
-    // CNPJ format: 12.345.678/0001-90
-    return pixKey.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-  } else if (/^\d+$/.test(pixKey) && (pixKey.length >= 10 && pixKey.length <= 11)) {
-    // Phone number: (11) 99999-9999
-    if (pixKey.length === 11) {
-      return pixKey.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
-    } else {
-      return pixKey.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
-    }
-  } else {
-    // Random key - show first 8 chars and last 4
-    if (pixKey.length > 12) {
-      return `${pixKey.substring(0, 8)}...${pixKey.substring(pixKey.length - 4)}`;
-    }
-    return pixKey;
-  }
+  // Use the formatPixKey function from pixUtils
+  const { formatPixKey } = require('./pixUtils');
+  return formatPixKey(pixKey);
 }
 
 // Function to generate and download invoice PDF

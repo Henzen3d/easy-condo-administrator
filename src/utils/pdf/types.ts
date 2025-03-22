@@ -1,4 +1,3 @@
-
 // Interface for invoice data
 export interface InvoiceData {
   condoName: string;
@@ -34,4 +33,5 @@ export interface InvoiceData {
   pixKey?: string;
   transactionId?: string;
   beneficiaryName?: string;
+  city?: string; // Cidade do beneficiário para geração do PIX
 }

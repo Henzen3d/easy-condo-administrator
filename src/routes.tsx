@@ -1,20 +1,33 @@
+import { lazy, Suspense } from "react";
 import { createBrowserRouter } from "react-router-dom";
-import Dashboard from "./pages/Dashboard";
-import Units from "./pages/Units";
-import Residents from "./pages/Residents";
-import Billing from "./pages/Billing";
-import InvoiceHistory from "./pages/InvoiceHistory";
-import BillingGenerator from "./pages/BillingGenerator";
-import Transactions from "./pages/Transactions";
-import BankAccounts from "./pages/BankAccounts";
-import Settings from "./pages/Settings";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import NotFound from "./pages/NotFound";
 import App from "./App";
-import UtilityManagement from "./pages/UtilityManagement";
+import NotFound from "./pages/NotFound";
+
+// Loading component for lazy loaded routes
+const PageLoading = () => (
+  <div className="flex items-center justify-center h-full w-full min-h-[400px]">
+    <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+  </div>
+);
+
+// Lazy load all page components
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Units = lazy(() => import("./pages/Units"));
+const Billing = lazy(() => import("./pages/Billing"));
+const InvoiceHistory = lazy(() => import("./pages/InvoiceHistory"));
+const BillingGenerator = lazy(() => import("./pages/BillingGenerator"));
+const Transactions = lazy(() => import("./pages/Transactions"));
+const BankAccounts = lazy(() => import("./pages/BankAccounts"));
+const Settings = lazy(() => import("./pages/Settings"));
+const UtilityManagement = lazy(() => import("./pages/UtilityManagement"));
+const Reports = lazy(() => import("./pages/Reports"));
+
+// Wrap component with Suspense
+const withSuspense = (Component: React.ComponentType) => (
+  <Suspense fallback={<PageLoading />}>
+    <Component />
+  </Suspense>
+);
 
 const router = createBrowserRouter([
   {
@@ -23,62 +36,50 @@ const router = createBrowserRouter([
     errorElement: <NotFound />,
     children: [
       {
-        path: "/",
-        element: <Dashboard />,
+        path: "", // Rota vazia para o index
+        element: null, // O App.tsx já vai renderizar o Index
       },
       {
-        path: "/units",
-        element: <Units />,
+        path: "dashboard",
+        element: withSuspense(Dashboard),
       },
       {
-        path: "/residents",
-        element: <Residents />,
+        path: "units",
+        element: withSuspense(Units),
       },
       {
-        path: "/billing",
-        element: <Billing />,
+        path: "billing",
+        element: withSuspense(Billing),
       },
       {
-        path: "/invoice-history",
-        element: <InvoiceHistory />,
+        path: "invoice-history",
+        element: withSuspense(InvoiceHistory),
       },
       {
-        path: "/billing-generator",
-        element: <BillingGenerator />,
+        path: "billing-generator",
+        element: withSuspense(BillingGenerator),
       },
       {
-        path: "/transactions",
-        element: <Transactions />,
+        path: "transactions",
+        element: withSuspense(Transactions),
       },
       {
-        path: "/bank-accounts",
-        element: <BankAccounts />,
+        path: "bank-accounts",
+        element: withSuspense(BankAccounts),
       },
       {
-        path: "/utility-management",
-        element: <UtilityManagement />,
+        path: "utility-management",
+        element: withSuspense(UtilityManagement),
       },
       {
-        path: "/settings",
-        element: <Settings />,
+        path: "reports",
+        element: withSuspense(Reports),
       },
+      {
+        path: "settings",
+        element: withSuspense(Settings),
+      }
     ],
-  },
-  {
-    path: "/login",
-    element: <Login />,
-  },
-  {
-    path: "/register",
-    element: <Register />,
-  },
-  {
-    path: "/forgot-password",
-    element: <ForgotPassword />,
-  },
-  {
-    path: "/reset-password",
-    element: <ResetPassword />,
   },
 ]);
 

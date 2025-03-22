@@ -1,47 +1,67 @@
-import { supabase } from '@/integrations/supabase/client';
-
-export type BillingStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
+import { supabase } from "@/integrations/supabase/client";
 
 export interface Billing {
   id: string;
   unit: string;
+  unit_id?: number;
   resident: string;
   description: string;
   amount: number;
-  dueDate: string;
-  status: BillingStatus;
-  isPrinted: boolean;
-  isSent: boolean;
+  due_date: string;
+  status: 'pending' | 'paid' | 'overdue' | 'cancelled';
+  is_printed: boolean;
+  is_sent: boolean;
+  created_at?: string;
+  updated_at?: string;
+  reference_year?: string;
 }
 
-// Função para buscar todas as cobranças
 export async function fetchBillings() {
+  console.log("billingService.ts: Iniciando fetchBillings()");
   try {
     const { data, error } = await supabase
       .from('billings')
-      .select('*')
-      .order('due_date', { ascending: false });
+      .select(`
+        *,
+        units:unit_id (
+          number,
+          resident_name
+        )
+      `)
+      .order('created_at', { ascending: false });
 
     if (error) {
+      console.error('Erro ao buscar cobranças:', error);
       throw error;
     }
 
-    // Converter do formato do banco para o formato da aplicação
+    console.log("billingService.ts: Dados recebidos do Supabase:", data);
+
     return data.map(item => ({
       id: item.id,
-      unit: item.unit,
-      resident: item.resident,
+      unit: item.units?.number || item.unit || 'N/A',
+      unit_id: item.unit_id,
+      resident: item.units?.resident_name || item.resident || 'N/A',
       description: item.description,
-      amount: item.amount,
-      dueDate: item.due_date,
-      status: item.status as BillingStatus,
-      isPrinted: item.is_printed,
-      isSent: item.is_sent
+      amount: Number(item.amount) || 0,
+      due_date: item.due_date,
+      status: validateBillingStatus(item.status),
+      is_printed: Boolean(item.is_printed),
+      is_sent: Boolean(item.is_sent),
+      created_at: item.created_at,
+      updated_at: item.updated_at
     }));
   } catch (error) {
     console.error('Erro ao buscar cobranças:', error);
     return [];
   }
+}
+
+function validateBillingStatus(status: string): Billing['status'] {
+  const validStatuses: Billing['status'][] = ['pending', 'paid', 'overdue', 'cancelled'];
+  return validStatuses.includes(status as Billing['status']) 
+    ? (status as Billing['status']) 
+    : 'pending';
 }
 
 // Função para buscar cobranças por unidade
@@ -223,4 +243,67 @@ export function groupBillingsByUnit(billings: Billing[]) {
   });
   
   return Object.values(grouped);
-} 
+}
+
+export async function generateUtilityBilling({
+  unit,
+  utility_type,
+  reading_id,
+  amount
+}: {
+  unit: string;
+  utility_type: string;
+  reading_id: string;
+  amount: number;
+}) {
+  try {
+    // 1. Criar a cobrança no Supabase
+    const { data: billing, error: billingError } = await supabase
+      .from('billings')
+      .insert({
+        unit,
+        description: `Consumo de ${utility_type === 'water' ? 'água' : 'gás'} - ${new Date().toLocaleDateString()}`,
+        amount,
+        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 dias
+        status: 'pending',
+        is_printed: false,
+        is_sent: false,
+        reading_id, // Relacionar com a leitura
+        type: 'utility', // Identificar como cobrança de consumo
+        created_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (billingError) {
+      console.error('Erro ao criar cobrança:', billingError);
+      return { success: false, error: billingError };
+    }
+
+    // 2. Criar transação pendente
+    const { error: transactionError } = await supabase
+      .from('transactions')
+      .insert({
+        description: `Cobrança de ${utility_type === 'water' ? 'água' : 'gás'} - Unidade ${unit}`,
+        amount,
+        type: 'income',
+        category: utility_type === 'water' ? 'Água' : 'Gás',
+        status: 'pending',
+        date: new Date().toISOString(),
+        unit,
+        billing_id: billing.id
+      });
+
+    if (transactionError) {
+      console.error('Erro ao criar transação:', transactionError);
+      // Mesmo com erro na transação, retornamos sucesso pois a cobrança foi criada
+      return { success: true, data: billing };
+    }
+
+    return { success: true, data: billing };
+  } catch (error) {
+    console.error('Erro ao gerar cobrança de consumo:', error);
+    return { success: false, error };
+  }
+}
+

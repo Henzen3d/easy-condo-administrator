@@ -59,6 +59,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { BankSelector } from "@/components/ui/bank-selector";
 
 // Function to format currency
 const formatCurrency = (value: number) => {
@@ -330,72 +331,70 @@ function BankAccountCard({ account, onUpdate, onDelete, showBalance, onToggleBal
                 onChange={(e) => setEditedAccount({...editedAccount, name: e.target.value})}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-bank-name">Banco</Label>
-                <Popover open={openEditBankCombobox} onOpenChange={setOpenEditBankCombobox}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={openEditBankCombobox}
-                      className="w-full justify-between"
-                    >
-                      {editedAccount.bank
-                        ? formatBankOption(banks.find(b => b.code === editedAccount.bank) || editedAccount.bank)
-                        : "Selecione o banco"}
-                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="p-0" align="start">
-                    <Command>
-                      <CommandInput
-                        placeholder="Buscar banco..."
-                        value={editBankSearchValue}
-                        onValueChange={setEditBankSearchValue}
-                        className="h-9"
-                      />
-                      <CommandList className="max-h-[300px] overflow-y-auto">
-                        <CommandEmpty>Nenhum banco encontrado.</CommandEmpty>
-                        <CommandGroup>
-                          {filteredEditBanks.map((bank) => (
-                            <CommandItem
-                              key={bank.code}
-                              value={bank.code}
-                              onSelect={(value) => {
-                                setEditedAccount((prev) => ({ ...prev, bank: value }));
-                                setOpenEditBankCombobox(false);
-                              }}
-                              className="cursor-pointer hover:bg-accent hover:text-accent-foreground"
-                              onClick={() => {
-                                setEditedAccount((prev) => ({ ...prev, bank: bank.code }));
-                                setOpenEditBankCombobox(false);
-                              }}
-                            >
-                              {formatBankOption(bank)}
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-account-type">Tipo de Conta</Label>
-                <Select 
-                  value={editedAccount.type}
-                  onValueChange={(value: "checking" | "savings") => setEditedAccount({...editedAccount, type: value})}
-                >
-                  <SelectTrigger id="edit-account-type">
-                    <SelectValue placeholder="Selecione..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="checking">Corrente</SelectItem>
-                    <SelectItem value="savings">Poupança</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-bank-name">Banco</Label>
+              <Popover open={openEditBankCombobox} onOpenChange={setOpenEditBankCombobox}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openEditBankCombobox}
+                    className="w-full justify-between"
+                  >
+                    {editedAccount.bank
+                      ? formatBankOption(banks.find(b => b.code === editedAccount.bank) || editedAccount.bank)
+                      : "Selecione o banco"}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 w-[400px]" align="start">
+                  <div className="p-2 border-b">
+                    <Input
+                      placeholder="Buscar banco por nome ou código..."
+                      value={editBankSearchValue}
+                      onChange={(e) => setEditBankSearchValue(e.target.value)}
+                      className="w-full"
+                    />
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto">
+                    {loadingBanks ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">Carregando bancos...</div>
+                    ) : filteredEditBanks.length === 0 ? (
+                      <div className="p-4 text-center text-sm text-muted-foreground">Nenhum banco encontrado</div>
+                    ) : (
+                      <div className="py-1">
+                        {filteredEditBanks.map((bank) => (
+                          <div 
+                            key={bank.code}
+                            onClick={() => {
+                              setEditedAccount((prev) => ({ ...prev, bank: bank.code }));
+                              setOpenEditBankCombobox(false);
+                            }}
+                            className="px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                          >
+                            {formatBankOption(bank)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-account-type">Tipo de Conta</Label>
+              <Select 
+                value={editedAccount.type}
+                onValueChange={(value: "checking" | "savings") => setEditedAccount({...editedAccount, type: value})}
+              >
+                <SelectTrigger id="edit-account-type">
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="checking">Corrente</SelectItem>
+                  <SelectItem value="savings">Poupança</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -691,244 +690,237 @@ export default function BankAccounts() {
                     onChange={(e) => setNewAccount({...newAccount, name: e.target.value})}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="bank-name">Banco</Label>
-                    <Popover open={openNewBankCombobox} onOpenChange={setOpenNewBankCombobox}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={openNewBankCombobox}
-                          className="w-full justify-between"
-                        >
-                          {newAccount.bank
-                            ? formatBankOption(banks.find(b => b.code === newAccount.bank) || newAccount.bank)
-                            : "Selecione o banco"}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="p-0" align="start">
-                        <Command>
-                          <CommandInput
-                            placeholder="Buscar banco..."
-                            value={newBankSearchValue}
-                            onValueChange={setNewBankSearchValue}
-                            className="h-9"
-                          />
-                          <CommandList className="max-h-[300px] overflow-y-auto">
-                            <CommandEmpty>Nenhum banco encontrado.</CommandEmpty>
-                            <CommandGroup>
-                              {loadingBanks ? (
-                                <CommandItem disabled>Carregando bancos...</CommandItem>
-                              ) : (
-                                filteredNewBanks.map((bank) => (
-                                  <CommandItem
-                                    key={bank.code}
-                                    value={bank.code}
-                                    onSelect={(value) => {
-                                      setNewAccount((prev) => ({ ...prev, bank: bank.code }));
-                                      setOpenNewBankCombobox(false);
-                                      setNewBankSearchValue("");
-                                    }}
-                                    className="cursor-pointer hover:bg-accent"
-                                    onClick={() => {
-                                      setNewAccount((prev) => ({ ...prev, bank: bank.code }));
-                                      setOpenNewBankCombobox(false);
-                                      setNewBankSearchValue("");
-                                    }}
-                                  >
-                                    {formatBankOption(bank)}
-                                  </CommandItem>
-                                ))
-                              )}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="account-type">Tipo de Conta</Label>
-                    <Select 
-                      value={newAccount.type}
-                      onValueChange={(value: "checking" | "savings") => setNewAccount({...newAccount, type: value})}
-                    >
-                      <SelectTrigger id="account-type">
-                        <SelectValue placeholder="Selecione..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="checking">Corrente</SelectItem>
-                        <SelectItem value="savings">Poupança</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="agency">Agência</Label>
-                    <Input 
-                      id="agency" 
-                      placeholder="Ex: 1234" 
-                      value={newAccount.agency}
-                      onChange={(e) => setNewAccount({...newAccount, agency: e.target.value})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="account-number">Conta</Label>
-                    <Input 
-                      id="account-number" 
-                      placeholder="Ex: 12345-6" 
-                      value={newAccount.accountNumber}
-                      onChange={(e) => setNewAccount({...newAccount, accountNumber: e.target.value})}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="balance">Saldo Inicial</Label>
-                    <Input 
-                      id="balance" 
-                      type="number" 
-                      placeholder="0,00" 
-                      value={newAccount.balance.toString()}
-                      onChange={(e) => setNewAccount({...newAccount, balance: parseFloat(e.target.value) || 0})}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pix-key-type">Tipo de Chave PIX</Label>
-                    <Select 
-                      value={newAccount.pixKeyType}
-                      onValueChange={(value) => {
-                        setNewAccount({
-                          ...newAccount, 
-                          pixKeyType: value,
-                          pixKey: value === "none" ? "" : newAccount.pixKey
-                        });
-                      }}
-                    >
-                      <SelectTrigger id="pix-key-type">
-                        <SelectValue placeholder="Selecione o tipo de chave" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Nenhuma</SelectItem>
-                        <SelectItem value="cpf">CPF</SelectItem>
-                        <SelectItem value="cnpj">CNPJ</SelectItem>
-                        <SelectItem value="email">E-mail</SelectItem>
-                        <SelectItem value="phone">Telefone</SelectItem>
-                        <SelectItem value="random">Chave Aleatória</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bank-name">Banco</Label>
+                  <Popover open={openNewBankCombobox} onOpenChange={setOpenNewBankCombobox}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={openNewBankCombobox}
+                        className="w-full justify-between"
+                      >
+                        {newAccount.bank
+                          ? formatBankOption(banks.find(b => b.code === newAccount.bank) || newAccount.bank)
+                          : "Selecione o banco"}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="p-0 w-[400px]" align="start">
+                      <div className="p-2 border-b">
+                        <Input
+                          placeholder="Buscar banco por nome ou código..."
+                          value={newBankSearchValue}
+                          onChange={(e) => setNewBankSearchValue(e.target.value)}
+                          className="w-full"
+                        />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto">
+                        {loadingBanks ? (
+                          <div className="p-4 text-center text-sm text-muted-foreground">Carregando bancos...</div>
+                        ) : filteredNewBanks.length === 0 ? (
+                          <div className="p-4 text-center text-sm text-muted-foreground">Nenhum banco encontrado</div>
+                        ) : (
+                          <div className="py-1">
+                            {filteredNewBanks.map((bank) => (
+                              <div 
+                                key={bank.code}
+                                onClick={() => {
+                                  setNewAccount((prev) => ({ ...prev, bank: bank.code }));
+                                  setOpenNewBankCombobox(false);
+                                  setNewBankSearchValue("");
+                                }}
+                                className="px-2 py-1.5 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                              >
+                                {formatBankOption(bank)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="pix-key">
-                    Chave PIX
-                    {newAccount.pixKeyType && newAccount.pixKeyType !== "none" && (
-                      <span className="text-xs text-muted-foreground ml-2">
-                        {newAccount.pixKeyType === "cpf" && "Formato: 000.000.000-00"}
-                        {newAccount.pixKeyType === "cnpj" && "Formato: 00.000.000/0000-00"}
-                        {newAccount.pixKeyType === "email" && "Formato: exemplo@dominio.com"}
-                        {newAccount.pixKeyType === "phone" && "Formato: (00) 90000-0000"}
-                        {newAccount.pixKeyType === "random" && "Formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}
-                      </span>
-                    )}
-                  </Label>
+                  <Label htmlFor="account-type">Tipo de Conta</Label>
+                  <Select 
+                    value={newAccount.type}
+                    onValueChange={(value: "checking" | "savings") => setNewAccount({...newAccount, type: value})}
+                  >
+                    <SelectTrigger id="account-type">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="checking">Corrente</SelectItem>
+                      <SelectItem value="savings">Poupança</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="agency">Agência</Label>
                   <Input 
-                    id="pix-key" 
-                    placeholder={
-                      newAccount.pixKeyType === "cpf" ? "123.456.789-00" :
-                      newAccount.pixKeyType === "cnpj" ? "12.345.678/0001-00" :
-                      newAccount.pixKeyType === "email" ? "exemplo@email.com" :
-                      newAccount.pixKeyType === "phone" ? "(11) 91234-5678" :
-                      newAccount.pixKeyType === "random" ? "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" :
-                      ""
-                    }
-                    value={newAccount.pixKey}
-                    onChange={(e) => setNewAccount({...newAccount, pixKey: e.target.value})}
-                    disabled={!newAccount.pixKeyType || newAccount.pixKeyType === "none"}
+                    id="agency" 
+                    placeholder="Ex: 1234" 
+                    value={newAccount.agency}
+                    onChange={(e) => setNewAccount({...newAccount, agency: e.target.value})}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="account-color">Cor</Label>
-                  <ColorPicker 
-                    value={newAccount.color}
-                    onChange={(value) => setNewAccount({...newAccount, color: value})}
+                  <Label htmlFor="account-number">Conta</Label>
+                  <Input 
+                    id="account-number" 
+                    placeholder="Ex: 12345-6" 
+                    value={newAccount.accountNumber}
+                    onChange={(e) => setNewAccount({...newAccount, accountNumber: e.target.value})}
                   />
                 </div>
               </div>
-              <DialogFooter>
-                <Button 
-                  variant="outline" 
-                  onClick={() => {
-                    setIsNewAccountDialogOpen(false);
-                    // Reset the form
-                    setNewAccount({
-                      name: "",
-                      bank: "",
-                      accountNumber: "",
-                      agency: "",
-                      balance: 0,
-                      type: "checking",
-                      color: "blue",
-                      pixKey: "",
-                      pixKeyType: "none"
-                    });
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  onClick={() => {
-                    // Validate fields
-                    if (!newAccount.name) {
-                      toast.error("O nome da conta é obrigatório");
-                      return;
-                    }
-                    if (!newAccount.bank) {
-                      toast.error("O nome do banco é obrigatório");
-                      return;
-                    }
-                    if (!newAccount.accountNumber) {
-                      toast.error("O número da conta é obrigatório");
-                      return;
-                    }
-                    if (!newAccount.agency) {
-                      toast.error("A agência é obrigatória");
-                      return;
-                    }
-                    
-                    // Add the new account
-                    addBankAccount({
-                      ...newAccount,
-                      pixKeyType: newAccount.pixKeyType === "none" ? null : newAccount.pixKeyType,
-                      pixKey: newAccount.pixKeyType === "none" ? null : newAccount.pixKey
-                    });
-                    
-                    // Show success message
-                    toast.success("Conta bancária adicionada com sucesso");
-                    
-                    // Close the dialog and reset the form
-                    setIsNewAccountDialogOpen(false);
-                    setNewAccount({
-                      name: "",
-                      bank: "",
-                      accountNumber: "",
-                      agency: "",
-                      balance: 0,
-                      type: "checking",
-                      color: "blue",
-                      pixKey: "",
-                      pixKeyType: "none"
-                    });
-                  }}
-                >
-                  Adicionar Conta
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="balance">Saldo Inicial</Label>
+                  <Input 
+                    id="balance" 
+                    type="number" 
+                    placeholder="0,00" 
+                    value={newAccount.balance.toString()}
+                    onChange={(e) => setNewAccount({...newAccount, balance: parseFloat(e.target.value) || 0})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pix-key-type">Tipo de Chave PIX</Label>
+                  <Select 
+                    value={newAccount.pixKeyType}
+                    onValueChange={(value) => {
+                      setNewAccount({
+                        ...newAccount, 
+                        pixKeyType: value,
+                        pixKey: value === "none" ? "" : newAccount.pixKey
+                      });
+                    }}
+                  >
+                    <SelectTrigger id="pix-key-type">
+                      <SelectValue placeholder="Selecione o tipo de chave" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      <SelectItem value="cpf">CPF</SelectItem>
+                      <SelectItem value="cnpj">CNPJ</SelectItem>
+                      <SelectItem value="email">E-mail</SelectItem>
+                      <SelectItem value="phone">Telefone</SelectItem>
+                      <SelectItem value="random">Chave Aleatória</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pix-key">
+                  Chave PIX
+                  {newAccount.pixKeyType && newAccount.pixKeyType !== "none" && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {newAccount.pixKeyType === "cpf" && "Formato: 000.000.000-00"}
+                      {newAccount.pixKeyType === "cnpj" && "Formato: 00.000.000/0000-00"}
+                      {newAccount.pixKeyType === "email" && "Formato: exemplo@dominio.com"}
+                      {newAccount.pixKeyType === "phone" && "Formato: (00) 90000-0000"}
+                      {newAccount.pixKeyType === "random" && "Formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"}
+                    </span>
+                  )}
+                </Label>
+                <Input 
+                  id="pix-key" 
+                  placeholder={
+                    newAccount.pixKeyType === "cpf" ? "123.456.789-00" :
+                    newAccount.pixKeyType === "cnpj" ? "12.345.678/0001-00" :
+                    newAccount.pixKeyType === "email" ? "exemplo@email.com" :
+                    newAccount.pixKeyType === "phone" ? "(11) 91234-5678" :
+                    newAccount.pixKeyType === "random" ? "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" :
+                    ""
+                  }
+                  value={newAccount.pixKey}
+                  onChange={(e) => setNewAccount({...newAccount, pixKey: e.target.value})}
+                  disabled={!newAccount.pixKeyType || newAccount.pixKeyType === "none"}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="account-color">Cor</Label>
+                <ColorPicker 
+                  value={newAccount.color}
+                  onChange={(value) => setNewAccount({...newAccount, color: value})}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsNewAccountDialogOpen(false);
+                  // Reset the form
+                  setNewAccount({
+                    name: "",
+                    bank: "",
+                    accountNumber: "",
+                    agency: "",
+                    balance: 0,
+                    type: "checking",
+                    color: "blue",
+                    pixKey: "",
+                    pixKeyType: "none"
+                  });
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={() => {
+                  // Validate fields
+                  if (!newAccount.name) {
+                    toast.error("O nome da conta é obrigatório");
+                    return;
+                  }
+                  if (!newAccount.bank) {
+                    toast.error("O nome do banco é obrigatório");
+                    return;
+                  }
+                  if (!newAccount.accountNumber) {
+                    toast.error("O número da conta é obrigatório");
+                    return;
+                  }
+                  if (!newAccount.agency) {
+                    toast.error("A agência é obrigatória");
+                    return;
+                  }
+                  
+                  // Add the new account
+                  addBankAccount({
+                    ...newAccount,
+                    pixKeyType: newAccount.pixKeyType === "none" ? null : newAccount.pixKeyType,
+                    pixKey: newAccount.pixKeyType === "none" ? null : newAccount.pixKey
+                  });
+                  
+                  // Show success message
+                  toast.success("Conta bancária adicionada com sucesso");
+                  
+                  // Close the dialog and reset the form
+                  setIsNewAccountDialogOpen(false);
+                  setNewAccount({
+                    name: "",
+                    bank: "",
+                    accountNumber: "",
+                    agency: "",
+                    balance: 0,
+                    type: "checking",
+                    color: "blue",
+                    pixKey: "",
+                    pixKeyType: "none"
+                  });
+                }}
+              >
+                Adicionar Conta
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Debug information */}

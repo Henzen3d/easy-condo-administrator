@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
+import React from "react";
 import { Button } from "@/components/ui/button";
-import { 
+import {
   Card,
   CardContent,
   CardHeader,
@@ -56,7 +57,9 @@ import {
   Building,
   CalendarIcon,
   UserIcon,
-  HomeIcon
+  HomeIcon,
+  ChevronUp,
+  ChevronDown
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -85,6 +88,13 @@ import BillingFilters from "@/components/billing/BillingFilters";
 import { 
   updateBillingFlag, 
 } from "@/utils/consumptionUtils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type BillingStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
 
@@ -129,8 +139,10 @@ const BillingStatusBadge = ({ status }: { status: BillingStatus }) => {
 const Billing = () => {
   const [isNewBillingDialogOpen, setIsNewBillingDialogOpen] = useState(false);
   const [tabValue, setTabValue] = useState("all");
+  const [monthFilter, setMonthFilter] = useState("all");
   const [billings, setBillings] = useState<BillingDisplay[]>([]);
   const [filteredBillings, setFilteredBillings] = useState<BillingDisplay[]>([]);
+  const [expandedUnits, setExpandedUnits] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [selectedBilling, setSelectedBilling] = useState<BillingDisplay | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
@@ -167,6 +179,8 @@ const Billing = () => {
     try {
       setIsLoading(true);
       
+      console.log("Iniciando busca de cobranças do Supabase...");
+      
       const { data, error } = await supabase
         .from('billings')
         .select('*')
@@ -179,6 +193,8 @@ const Billing = () => {
         setBillings([]);
         return;
       } 
+      
+      console.log("Dados recebidos do Supabase:", data);
       
       if (data) {
         // Transform database records to display format
@@ -193,8 +209,9 @@ const Billing = () => {
           };
         });
         
+        console.log("Cobranças formatadas:", formattedBillings);
         setBillings(formattedBillings);
-        applyFilters(formattedBillings, activeFilters, tabValue);
+        applyFilters(formattedBillings, activeFilters, tabValue, monthFilter);
       } else {
         setBillings([]);
         setFilteredBillings([]);
@@ -207,7 +224,7 @@ const Billing = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [activeFilters, tabValue]);
+  }, [activeFilters, tabValue, monthFilter]);
   
   // Helper function to validate billing status
   const validateStatus = (status: string): BillingStatus => {
@@ -218,6 +235,7 @@ const Billing = () => {
   };
 
   useEffect(() => {
+    // Memoize fetchBillings to prevent re-renders causing multiple fetches
     fetchBillings();
   }, [fetchBillings]);
 
@@ -232,53 +250,106 @@ const Billing = () => {
       startDate: Date | null;
       endDate: Date | null;
     },
-    currentTab: string
+    currentTab: string,
+    currentMonth: string = "all"
   ) => {
+    console.log("Billing: Iniciando aplicação de filtros", {
+      totalBillings: allBillings.length,
+      filters,
+      currentTab,
+      currentMonth
+    });
+    
     let result = [...allBillings];
     
-    // Filtrar por tab
+    // Filtrar por tab (status)
     if (currentTab !== "all") {
+      console.log(`Billing: Filtrando por tab "${currentTab}"`);
       result = result.filter(billing => billing.status === currentTab);
+      console.log(`Billing: ${result.length} cobranças após filtro de tab`);
+    }
+    
+    // Filtro por mês
+    if (currentMonth !== "all") {
+      console.log(`Billing: Filtrando por mês "${currentMonth}"`);
+      result = result.filter(billing => {
+        if (!billing.dueDate) return false;
+        
+        const dueDate = new Date(billing.dueDate);
+        const month = dueDate.getMonth() + 1; // getMonth() retorna 0-11
+        const year = dueDate.getFullYear();
+        const monthYear = `${month}-${year}`;
+        
+        return monthYear === currentMonth;
+      });
+      console.log(`Billing: ${result.length} cobranças após filtro de mês`);
     }
     
     // Filtro por status (se não estiver usando tabs ou se o status escolhido for diferente do tab)
     if (filters.status !== "all" && (currentTab === "all" || filters.status !== currentTab)) {
+      console.log(`Billing: Filtrando por status "${filters.status}"`);
       result = result.filter(billing => billing.status === filters.status);
+      console.log(`Billing: ${result.length} cobranças após filtro de status`);
     }
     
     // Filtro por unit_id
     if (filters.unit_id && filters.unit_id !== "all") {
-      result = result.filter(billing => 
+      console.log(`Billing: Filtrando por unit_id "${filters.unit_id}"`);
+      const filtered = result.filter(billing => 
         billing.unit_id?.toString() === filters.unit_id
       );
+      
+      if (filtered.length === 0) {
+        console.warn(`Billing: Nenhuma cobrança encontrada com unit_id="${filters.unit_id}"`);
+        console.log("Billing: IDs de unidades disponíveis nas cobranças:", 
+          [...new Set(result.map(b => b.unit_id?.toString()))].filter(Boolean).join(", "));
+      }
+      
+      result = filtered;
+      console.log(`Billing: ${result.length} cobranças após filtro de unit_id`);
     }
     
     // Filtro por residente
     if (filters.resident) {
+      console.log(`Billing: Filtrando por residente "${filters.resident}"`);
       const residentLower = filters.resident.toLowerCase();
       result = result.filter(billing => 
         billing.resident.toLowerCase().includes(residentLower)
       );
+      console.log(`Billing: ${result.length} cobranças após filtro de residente`);
     }
     
     // Filtro por data inicial
     if (filters.startDate) {
+      console.log(`Billing: Filtrando por data inicial "${filters.startDate}"`);
       const startDate = new Date(filters.startDate);
       startDate.setHours(0, 0, 0, 0);
       result = result.filter(billing => {
         const dueDate = new Date(billing.dueDate);
         return dueDate >= startDate;
       });
+      console.log(`Billing: ${result.length} cobranças após filtro de data inicial`);
     }
     
     // Filtro por data final
     if (filters.endDate) {
+      console.log(`Billing: Filtrando por data final "${filters.endDate}"`);
       const endDate = new Date(filters.endDate);
       endDate.setHours(23, 59, 59, 999);
       result = result.filter(billing => {
         const dueDate = new Date(billing.dueDate);
         return dueDate <= endDate;
       });
+      console.log(`Billing: ${result.length} cobranças após filtro de data final`);
+    }
+    
+    console.log("Billing: Resultado final da filtragem:", {
+      initialCount: allBillings.length,
+      filteredCount: result.length
+    });
+    
+    if (result.length === 0 && allBillings.length > 0) {
+      console.warn("Billing: Todos os registros foram filtrados - revisar critérios");
     }
     
     setFilteredBillings(result);
@@ -287,7 +358,13 @@ const Billing = () => {
   // Handler para quando as tabs mudam
   const handleTabChange = (value: string) => {
     setTabValue(value);
-    applyFilters(billings, activeFilters, value);
+    applyFilters(billings, activeFilters, value, monthFilter);
+  };
+
+  // Handler para quando o filtro de mês muda
+  const handleMonthChange = (value: string) => {
+    setMonthFilter(value);
+    applyFilters(billings, activeFilters, tabValue, value);
   };
 
   // Handler para aplicar filtros
@@ -300,7 +377,7 @@ const Billing = () => {
     endDate: Date | null;
   }) => {
     setActiveFilters(filters);
-    applyFilters(billings, filters, tabValue);
+    applyFilters(billings, filters, tabValue, monthFilter);
   };
 
   // Improved action handlers with confirmation dialogs
@@ -353,7 +430,7 @@ const Billing = () => {
           if (result.success) {
             // Atualizar ambos os estados locais
             const updateBillingState = (prev: BillingDisplay[]) =>
-              prev.map(b => b.id === confirmAction.id ? { ...b, status: "paid" } : b);
+              prev.map(b => b.id === confirmAction.id ? { ...b, status: "paid" as BillingStatus } : b);
             
             setBillings(updateBillingState);
             setFilteredBillings(updateBillingState);
@@ -362,7 +439,6 @@ const Billing = () => {
             if (billing) {
               // Adicionar a transação
               addTransaction({
-                id: Date.now(),
                 account: defaultAccount.id.toString(),
                 amount: billing.amount,
                 category: 'Receita',
@@ -438,7 +514,6 @@ const Billing = () => {
 
             // Adicionar transação de estorno
             addTransaction({
-              id: Date.now(),
               account: defaultAccount.id.toString(),
               amount: billingToCancel.amount,
               category: 'Estorno',
@@ -463,8 +538,8 @@ const Billing = () => {
             const updateBillingState = (prev: BillingDisplay[]) =>
               prev.map(b => b.id === confirmAction.id ? { ...b, status: "cancelled" } : b);
             
-            setBillings(updateBillingState);
-            setFilteredBillings(updateBillingState);
+            setBillings(updateBillingState as (prev: BillingDisplay[]) => BillingDisplay[]);
+            setFilteredBillings(updateBillingState as (prev: BillingDisplay[]) => BillingDisplay[]);
             
             toast.success('Cobrança cancelada e saldo atualizado');
           } else {
@@ -542,12 +617,20 @@ const Billing = () => {
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('pt-BR').format(date);
+    try {
+      if (!dateString) return 'Data indisponível';
+      const date = new Date(dateString);
+      // Verifica se a data é válida
+      if (isNaN(date.getTime())) return 'Data inválida';
+      return new Intl.DateTimeFormat('pt-BR').format(date);
+    } catch (error) {
+      console.error('Erro ao formatar data:', dateString, error);
+      return 'Data inválida';
+    }
   };
 
   // Componente para gerar resumo de cobranças por unidade
-  const BillingsSummary = ({ billings, onClose }: { billings: BillingType[], onClose: () => void }) => {
+  const BillingsSummary = ({ billings, onClose }: { billings: BillingDisplay[], onClose: () => void }) => {
     const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
     const groupedBillings = groupBillingsByUnit(billings);
     
@@ -563,8 +646,16 @@ const Billing = () => {
     };
     
     const formatDate = (dateString: string) => {
-      const date = new Date(dateString);
-      return new Intl.DateTimeFormat('pt-BR').format(date);
+      try {
+        if (!dateString) return 'Data indisponível';
+        const date = new Date(dateString);
+        // Verifica se a data é válida
+        if (isNaN(date.getTime())) return 'Data inválida';
+        return new Intl.DateTimeFormat('pt-BR').format(date);
+      } catch (error) {
+        console.error('Erro ao formatar data:', dateString, error);
+        return 'Data inválida';
+      }
     };
 
     // Função para gerar PDF de resumo
@@ -572,25 +663,69 @@ const Billing = () => {
       if (!selectedUnitData) return;
       
       try {
+        toast.info('Gerando PDF de resumo...');
+        console.log('Gerando PDF para unidade:', selectedUnitData.unit);
+        
+        // Filtra as cobranças canceladas e calcula o valor total a ser pago
+        const activeAmount = selectedUnitData.billings
+          .filter(billing => billing.status !== 'cancelled')
+          .reduce((total, billing) => total + billing.amount, 0);
+        
+        // Converter o formato para o esperado pela função de geração de PDF
+        const billingItems = selectedUnitData.billings.map(b => ({
+          id: b.id,
+          unit: b.unit,
+          resident: b.resident,
+          description: b.description,
+          amount: b.amount,
+          due_date: b.dueDate,
+          status: b.status,
+          is_printed: b.is_printed,
+          is_sent: b.is_sent
+        }));
+        
         const pdfUrl = generateBillingsSummaryPDF(
           selectedUnitData.unit,
           selectedUnitData.resident,
-          selectedUnitData.items,
-          selectedUnitData.totalAmount
+          billingItems,
+          activeAmount  // Usando o valor total excluindo os cancelados
         );
         
-        // Abrir o PDF em uma nova aba
-        window.open(pdfUrl, '_blank');
+        console.log('URL do PDF de resumo gerado:', pdfUrl?.substring(0, 50) + '...');
         
-        // Marcar as cobranças como impressas
-        selectedUnitData.items.forEach(async (item) => {
-          await markBillingAsPrinted(item.id);
-        });
+        if (!pdfUrl) {
+          throw new Error('URL do PDF não foi gerada');
+        }
+        
+        // Abrir o PDF em uma nova aba
+        console.log('Abrindo PDF de resumo em nova aba...');
+        const newWindow = window.open(pdfUrl, '_blank');
+        
+        if (!newWindow) {
+          toast.error('Bloqueador de pop-ups impediu a abertura do PDF. Por favor, permita pop-ups para este site.');
+          console.error('Falha ao abrir nova janela - possível bloqueio de pop-up');
+          // Tente fornecer um link alternativo
+          const link = document.createElement('a');
+          link.href = pdfUrl;
+          link.download = `resumo_${selectedUnitData.unit}_${new Date().toISOString().split('T')[0]}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          console.log('Nova janela de resumo aberta com sucesso');
+        }
+        
+        // Marcar as cobranças ativas como impressas
+        selectedUnitData.billings
+          .filter(item => item.status !== 'cancelled')
+          .forEach(async (item) => {
+            await markBillingAsPrinted(item.id);
+          });
         
         toast.success('PDF de resumo gerado com sucesso');
       } catch (error) {
         console.error('Error generating PDF:', error);
-        toast.error('Erro ao gerar PDF de resumo');
+        toast.error(`Erro ao gerar PDF de resumo: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       }
     };
 
@@ -599,68 +734,129 @@ const Billing = () => {
       if (!selectedUnitData) return;
       
       try {
+        toast.info('Gerando boleto...');
+        console.log('Gerando boleto para unidade:', selectedUnitData.unit);
+        
+        // Filtra as cobranças canceladas e calcula o valor total a ser pago
+        const activeAmount = selectedUnitData.billings
+          .filter(billing => billing.status !== 'cancelled')
+          .reduce((total, billing) => total + billing.amount, 0);
+        
         // Gerar um boleto único para o total
         const combinedBilling: BillingType = {
-          id: `COMB-${selectedUnitData.unit}`,
+          id: `COMB-${selectedUnitData.unit}-${Date.now().toString().substring(0, 8)}`,
           unit: selectedUnitData.unit,
           resident: selectedUnitData.resident,
           description: `Cobranças Consolidadas - Unidade ${selectedUnitData.unit}`,
-          amount: selectedUnitData.totalAmount,
-          dueDate: new Date().toISOString().split('T')[0], // Data atual
+          amount: activeAmount,
+          due_date: new Date().toISOString().split('T')[0], // Data atual
           status: 'pending',
-          isPrinted: false,
-          isSent: false
+          is_printed: false,
+          is_sent: false
         };
         
+        console.log('Gerando boleto para:', combinedBilling);
         const pdfUrl = generateBillingBoleto(combinedBilling);
+        console.log('URL do boleto gerado:', pdfUrl?.substring(0, 50) + '...');
+        
+        if (!pdfUrl) {
+          throw new Error('URL do boleto não foi gerada');
+        }
         
         // Abrir o PDF em uma nova aba
-        window.open(pdfUrl, '_blank');
+        console.log('Abrindo boleto em nova aba...');
+        const newWindow = window.open(pdfUrl, '_blank');
         
-        // Marcar as cobranças como impressas
-        selectedUnitData.items.forEach(async (item) => {
-          await markBillingAsPrinted(item.id);
-        });
+        if (!newWindow) {
+          toast.error('Bloqueador de pop-ups impediu a abertura do boleto. Por favor, permita pop-ups para este site.');
+          console.error('Falha ao abrir nova janela - possível bloqueio de pop-up');
+          // Tente fornecer um link alternativo
+          const link = document.createElement('a');
+          link.href = pdfUrl;
+          link.download = `boleto_${selectedUnitData.unit}_${new Date().toISOString().split('T')[0]}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          console.log('Nova janela de boleto aberta com sucesso');
+        }
+        
+        // Marcar as cobranças ativas como impressas
+        selectedUnitData.billings
+          .filter(item => item.status !== 'cancelled')
+          .forEach(async (item) => {
+            await markBillingAsPrinted(item.id);
+          });
         
         toast.success('Boleto gerado com sucesso');
       } catch (error) {
         console.error('Error generating boleto:', error);
-        toast.error('Erro ao gerar boleto');
+        toast.error(`Erro ao gerar boleto: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       }
     };
 
-    // Função para gerar QR Code PIX
-    const handleGeneratePix = () => {
+    // Função para gerar PIX
+    const handleGeneratePixQRCode = async () => {
       if (!selectedUnitData) return;
       
       try {
+        toast.info('Gerando QR Code PIX...');
+        
+        // Filtra as cobranças canceladas e calcula o valor total a ser pago
+        const activeAmount = selectedUnitData.billings
+          .filter(billing => billing.status !== 'cancelled')
+          .reduce((total, billing) => total + billing.amount, 0);
+        
         // Gerar um PIX único para o total
         const combinedBilling: BillingType = {
-          id: `COMB-${selectedUnitData.unit}`,
+          id: `PIX-${selectedUnitData.unit}-${Date.now().toString().substring(0, 8)}`,
           unit: selectedUnitData.unit,
           resident: selectedUnitData.resident,
-          description: `Cobranças Consolidadas - Unidade ${selectedUnitData.unit}`,
-          amount: selectedUnitData.totalAmount,
-          dueDate: new Date().toISOString().split('T')[0], // Data atual
+          description: `Pagamento PIX - Unidade ${selectedUnitData.unit}`,
+          amount: activeAmount,
+          due_date: new Date().toISOString().split('T')[0], // Data atual
           status: 'pending',
-          isPrinted: false,
-          isSent: false
+          is_printed: false,
+          is_sent: false
         };
         
-        const pdfUrl = generatePixQRCode(combinedBilling);
+        console.log('Gerando QR Code para:', combinedBilling);
+        const pdfUrl = await generatePixQRCode(combinedBilling);
+        console.log('URL do PDF gerado:', pdfUrl?.substring(0, 50) + '...');
+        
+        if (!pdfUrl) {
+          throw new Error('URL do PDF não foi gerada');
+        }
         
         // Abrir o PDF em uma nova aba
-        window.open(pdfUrl, '_blank');
+        console.log('Abrindo PDF em nova aba...');
+        const newWindow = window.open(pdfUrl, '_blank');
         
-        // Marcar as cobranças como enviadas
-        selectedUnitData.items.forEach(async (item) => {
-          await markBillingAsSent(item.id);
-        });
+        if (!newWindow) {
+          toast.error('Bloqueador de pop-ups impediu a abertura do PDF. Por favor, permita pop-ups para este site.');
+          console.error('Falha ao abrir nova janela - possível bloqueio de pop-up');
+          // Tente fornecer um link alternativo
+          const link = document.createElement('a');
+          link.href = pdfUrl;
+          link.download = `pix_${selectedUnitData.unit}_${new Date().toISOString().split('T')[0]}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          console.log('Nova janela aberta com sucesso');
+        }
+        
+        // Marcar as cobranças ativas como impressas
+        selectedUnitData.billings
+          .filter(item => item.status !== 'cancelled')
+          .forEach(async (item) => {
+            await markBillingAsPrinted(item.id);
+          });
         
         toast.success('QR Code PIX gerado com sucesso');
       } catch (error) {
-        console.error('Error generating PIX:', error);
-        toast.error('Erro ao gerar QR Code PIX');
+        console.error('Error generating PIX QR code:', error);
+        toast.error(`Erro ao gerar QR Code PIX: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
       }
     };
 
@@ -677,7 +873,7 @@ const Billing = () => {
             <option value="">Selecione uma unidade</option>
             {groupedBillings.map((group) => (
               <option key={group.unit} value={group.unit}>
-                {group.unit} - {group.resident} ({group.items.length} cobranças)
+                {group.unit} - {group.resident} ({group.billings.length} cobranças)
               </option>
             ))}
           </select>
@@ -696,7 +892,7 @@ const Billing = () => {
                     variant="outline" 
                     size="sm" 
                     className="flex items-center gap-1"
-                    onClick={handleGeneratePix}
+                    onClick={handleGeneratePixQRCode}
                   >
                     <QrCode size={14} />
                     <span>Gerar PIX</span>
@@ -728,12 +924,20 @@ const Billing = () => {
                   <div className="bg-muted rounded-lg p-4">
                     <p className="text-sm text-muted-foreground">Total a Pagar</p>
                     <p className="text-2xl font-bold text-primary">
-                      {formatCurrency(selectedUnitData.totalAmount)}
+                      {formatCurrency(selectedUnitData.billings
+                        .filter(billing => billing.status !== 'cancelled')
+                        .reduce((total, billing) => total + billing.amount, 0))}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      (Apenas cobranças não canceladas)
                     </p>
                   </div>
                   <div className="bg-muted rounded-lg p-4">
                     <p className="text-sm text-muted-foreground">Itens</p>
-                    <p className="text-2xl font-bold">{selectedUnitData.items.length}</p>
+                    <p className="text-2xl font-bold">{selectedUnitData.billings.length}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ({selectedUnitData.billings.filter(b => b.status !== 'cancelled').length} ativos)
+                    </p>
                   </div>
                 </div>
                 
@@ -747,7 +951,7 @@ const Billing = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedUnitData.items.map((item) => (
+                    {selectedUnitData.billings.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell>{item.description}</TableCell>
                         <TableCell>{formatDate(item.dueDate)}</TableCell>
@@ -782,6 +986,56 @@ const Billing = () => {
     );
   };
 
+  // Função para alternar a expansão de uma unidade
+  const toggleUnitExpansion = (unitId: string) => {
+    setExpandedUnits(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(unitId)) {
+        newSet.delete(unitId);
+      } else {
+        newSet.add(unitId);
+      }
+      return newSet;
+    });
+  };
+
+  // Função para agrupar as cobranças por unidade
+  const groupBillingsByUnit = (billings: BillingDisplay[]) => {
+    const groupedByUnit: Record<string, {
+      unit: string,
+      unitId: string | number | null,
+      resident: string,
+      totalAmount: number,
+      billings: BillingDisplay[]
+    }> = {};
+
+    billings.forEach(billing => {
+      const unitKey = billing.unit;
+      
+      if (!groupedByUnit[unitKey]) {
+        groupedByUnit[unitKey] = {
+          unit: billing.unit,
+          unitId: billing.unit_id,
+          resident: billing.resident,
+          totalAmount: 0,
+          billings: []
+        };
+      }
+      
+      // Somente soma ao total se a cobrança não estiver cancelada
+      if (billing.status !== 'cancelled') {
+        groupedByUnit[unitKey].totalAmount += billing.amount;
+      }
+      
+      groupedByUnit[unitKey].billings.push(billing);
+    });
+
+    return Object.values(groupedByUnit).sort((a, b) => a.unit.localeCompare(b.unit));
+  };
+
+  // Agrupar as cobranças filtradas
+  const groupedBillings = groupBillingsByUnit(filteredBillings);
+
   return (
     <>
       <div className="flex justify-between items-center">
@@ -809,17 +1063,7 @@ const Billing = () => {
               </DialogDescription>
             </DialogHeader>
             <BillingsSummary 
-              billings={billings.map(b => ({
-                id: b.id,
-                unit: b.unit,
-                resident: b.resident,
-                description: b.description,
-                amount: b.amount,
-                dueDate: b.dueDate,
-                status: b.status,
-                isPrinted: b.is_printed,
-                isSent: b.is_sent
-              }))} 
+              billings={billings} 
               onClose={() => setIsSummaryDialogOpen(false)} 
             />
           </DialogContent>
@@ -868,14 +1112,10 @@ const Billing = () => {
         </DropdownMenu>
       </div>
 
-      <div className="grid md:grid-cols-4 gap-6">
-        <div className="md:col-span-1">
-          <BillingFilters onApplyFilters={handleApplyFilters} />
-        </div>
-        
-        <div className="md:col-span-3">
-          <Card>
-            <CardHeader className="pb-0">
+      <div className="grid md:grid-cols-1 gap-6">
+        <Card>
+          <CardHeader className="pb-0">
+            <div className="space-y-4">
               <Tabs value={tabValue} onValueChange={handleTabChange}>
                 <TabsList>
                   <TabsTrigger value="all">Todas</TabsTrigger>
@@ -884,271 +1124,385 @@ const Billing = () => {
                   <TabsTrigger value="overdue">Atrasadas</TabsTrigger>
                 </TabsList>
               </Tabs>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-md border mt-4">
-                {/* Tabela Desktop */}
-                <div className="hidden md:block">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Unidade</TableHead>
-                        <TableHead>Morador</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredBillings.map((billing) => (
-                        <TableRow key={billing.id}>
-                          <TableCell>{billing.unit}</TableCell>
-                          <TableCell>{billing.resident}</TableCell>
-                          <TableCell>{billing.description}</TableCell>
-                          <TableCell>{formatCurrency(billing.amount)}</TableCell>
-                          <TableCell>{formatDate(billing.dueDate)}</TableCell>
-                          <TableCell>
-                            <BillingStatusBadge status={billing.status} />
-                          </TableCell>
-                          <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem 
-                                  className="cursor-pointer"
-                                  onClick={() => viewBilling(billing.id)}
-                                >
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  <span>Visualizar</span>
-                                </DropdownMenuItem>
-                                
-                                {billing.status !== "paid" && billing.status !== "cancelled" && (
-                                  <DropdownMenuItem 
-                                    className="cursor-pointer"
-                                    onClick={() => showConfirmAction(
-                                      'pay',
-                                      billing.id, 
-                                      'Marcar como Pago', 
-                                      'Tem certeza que deseja marcar esta cobrança como paga?',
-                                      'Marcar como Pago'
-                                    )}
-                                  >
-                                    <CreditCard className="mr-2 h-4 w-4" />
-                                    <span>Marcar como Pago</span>
-                                  </DropdownMenuItem>
-                                )}
-                                
-                                {!billing.is_sent && billing.status !== "cancelled" && (
-                                  <DropdownMenuItem 
-                                    className="cursor-pointer"
-                                    onClick={() => showConfirmAction(
-                                      'send',
-                                      billing.id, 
-                                      'Marcar como Enviado', 
-                                      'Tem certeza que deseja marcar esta cobrança como enviada?',
-                                      'Marcar como Enviado'
-                                    )}
-                                  >
-                                    <Send className="mr-2 h-4 w-4" />
-                                    <span>Marcar como Enviado</span>
-                                  </DropdownMenuItem>
-                                )}
-                                
-                                {!billing.is_printed && billing.status !== "cancelled" && (
-                                  <DropdownMenuItem 
-                                    className="cursor-pointer"
-                                    onClick={() => showConfirmAction(
-                                      'print',
-                                      billing.id, 
-                                      'Marcar como Impresso', 
-                                      'Tem certeza que deseja marcar esta cobrança como impressa?',
-                                      'Marcar como Impresso'
-                                    )}
-                                  >
-                                    <Printer className="mr-2 h-4 w-4" />
-                                    <span>Marcar como Impresso</span>
-                                  </DropdownMenuItem>
-                                )}
-                                
-                                <DropdownMenuItem 
-                                  className="cursor-pointer"
-                                  onClick={() => editBilling(billing.id)}
-                                >
-                                  <Pencil className="mr-2 h-4 w-4" />
-                                  <span>Editar</span>
-                                </DropdownMenuItem>
-                                
-                                {billing.status !== "cancelled" && (
-                                  <DropdownMenuSeparator />
-                                )}
-                                
-                                {billing.status !== "cancelled" && (
-                                  <DropdownMenuItem 
-                                    className="cursor-pointer text-destructive"
-                                    onClick={() => showConfirmAction(
-                                      'cancel',
-                                      billing.id, 
-                                      'Cancelar Cobrança', 
-                                      'Tem certeza que deseja cancelar esta cobrança? Esta ação não pode ser desfeita.',
-                                      'Cancelar'
-                                    )}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    <span>Cancelar Cobrança</span>
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Tabela Mobile */}
-                <div className="md:hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredBillings.map((billing) => (
-                        <TableRow key={billing.id}>
-                          <TableCell>
-                            <div className="space-y-1">
-                              <div className="font-medium">{billing.description}</div>
-                              <div className="flex items-center text-sm text-muted-foreground">
-                                <CalendarIcon className="mr-1 h-3 w-3" />
-                                {formatDate(billing.dueDate)}
-                              </div>
-                              <div className="flex items-center text-sm text-muted-foreground">
-                                <UserIcon className="mr-1 h-3 w-3" />
-                                {billing.resident.split(' ')[0]}
-                                <HomeIcon className="ml-2 mr-1 h-3 w-3" />
-                                {billing.unit}
-                              </div>
-                              <div>
-                                <BillingStatusBadge status={billing.status} />
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {formatCurrency(billing.amount)}
-                          </TableCell>
-                          <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem 
-                                  className="cursor-pointer"
-                                  onClick={() => viewBilling(billing.id)}
-                                >
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  <span>Visualizar</span>
-                                </DropdownMenuItem>
-                                
-                                {billing.status !== "paid" && billing.status !== "cancelled" && (
-                                  <DropdownMenuItem 
-                                    className="cursor-pointer"
-                                    onClick={() => showConfirmAction(
-                                      'pay',
-                                      billing.id, 
-                                      'Marcar como Pago', 
-                                      'Tem certeza que deseja marcar esta cobrança como paga?',
-                                      'Marcar como Pago'
-                                    )}
-                                  >
-                                    <CreditCard className="mr-2 h-4 w-4" />
-                                    <span>Marcar como Pago</span>
-                                  </DropdownMenuItem>
-                                )}
-                                
-                                {!billing.is_sent && billing.status !== "cancelled" && (
-                                  <DropdownMenuItem 
-                                    className="cursor-pointer"
-                                    onClick={() => showConfirmAction(
-                                      'send',
-                                      billing.id, 
-                                      'Marcar como Enviado', 
-                                      'Tem certeza que deseja marcar esta cobrança como enviada?',
-                                      'Marcar como Enviado'
-                                    )}
-                                  >
-                                    <Send className="mr-2 h-4 w-4" />
-                                    <span>Marcar como Enviado</span>
-                                  </DropdownMenuItem>
-                                )}
-                                
-                                {!billing.is_printed && billing.status !== "cancelled" && (
-                                  <DropdownMenuItem 
-                                    className="cursor-pointer"
-                                    onClick={() => showConfirmAction(
-                                      'print',
-                                      billing.id, 
-                                      'Marcar como Impresso', 
-                                      'Tem certeza que deseja marcar esta cobrança como impressa?',
-                                      'Marcar como Impresso'
-                                    )}
-                                  >
-                                    <Printer className="mr-2 h-4 w-4" />
-                                    <span>Marcar como Impresso</span>
-                                  </DropdownMenuItem>
-                                )}
-                                
-                                <DropdownMenuItem 
-                                  className="cursor-pointer"
-                                  onClick={() => editBilling(billing.id)}
-                                >
-                                  <Pencil className="mr-2 h-4 w-4" />
-                                  <span>Editar</span>
-                                </DropdownMenuItem>
-                                
-                                {billing.status !== "cancelled" && (
-                                  <DropdownMenuSeparator />
-                                )}
-                                
-                                {billing.status !== "cancelled" && (
-                                  <DropdownMenuItem 
-                                    className="cursor-pointer text-destructive"
-                                    onClick={() => showConfirmAction(
-                                      'cancel',
-                                      billing.id, 
-                                      'Cancelar Cobrança', 
-                                      'Tem certeza que deseja cancelar esta cobrança? Esta ação não pode ser desfeita.',
-                                      'Cancelar'
-                                    )}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    <span>Cancelar Cobrança</span>
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+              
+              <div className="flex items-center">
+                <Label htmlFor="monthFilter" className="mr-2">Mês:</Label>
+                <Select value={monthFilter} onValueChange={handleMonthChange}>
+                  <SelectTrigger id="monthFilter" className="w-[180px]">
+                    <SelectValue placeholder="Todos os meses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os meses</SelectItem>
+                    {/* Meses do ano atual */}
+                    <SelectItem value="1-2025">Janeiro 2025</SelectItem>
+                    <SelectItem value="2-2025">Fevereiro 2025</SelectItem>
+                    <SelectItem value="3-2025">Março 2025</SelectItem>
+                    <SelectItem value="4-2025">Abril 2025</SelectItem>
+                    <SelectItem value="5-2025">Maio 2025</SelectItem>
+                    <SelectItem value="6-2025">Junho 2025</SelectItem>
+                    <SelectItem value="7-2025">Julho 2025</SelectItem>
+                    <SelectItem value="8-2025">Agosto 2025</SelectItem>
+                    <SelectItem value="9-2025">Setembro 2025</SelectItem>
+                    <SelectItem value="10-2025">Outubro 2025</SelectItem>
+                    <SelectItem value="11-2025">Novembro 2025</SelectItem>
+                    <SelectItem value="12-2025">Dezembro 2025</SelectItem>
+                    {/* Meses do ano anterior */}
+                    <SelectItem value="1-2024">Janeiro 2024</SelectItem>
+                    <SelectItem value="2-2024">Fevereiro 2024</SelectItem>
+                    <SelectItem value="3-2024">Março 2024</SelectItem>
+                    <SelectItem value="4-2024">Abril 2024</SelectItem>
+                    <SelectItem value="5-2024">Maio 2024</SelectItem>
+                    <SelectItem value="6-2024">Junho 2024</SelectItem>
+                    <SelectItem value="7-2024">Julho 2024</SelectItem>
+                    <SelectItem value="8-2024">Agosto 2024</SelectItem>
+                    <SelectItem value="9-2024">Setembro 2024</SelectItem>
+                    <SelectItem value="10-2024">Outubro 2024</SelectItem>
+                    <SelectItem value="11-2024">Novembro 2024</SelectItem>
+                    <SelectItem value="12-2024">Dezembro 2024</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border mt-4">
+              {/* Tabela Desktop - Consolidada por Unidade */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Unidade</TableHead>
+                      <TableHead>Morador</TableHead>
+                      <TableHead>Qtd. Cobranças</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groupedBillings.length > 0 ? (
+                      groupedBillings.map((group) => (
+                        <React.Fragment key={group.unit}>
+                          {/* Linha consolidada da unidade */}
+                          <TableRow 
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => toggleUnitExpansion(group.unit)}
+                          >
+                            <TableCell className="font-medium">{group.unit}</TableCell>
+                            <TableCell>{group.resident}</TableCell>
+                            <TableCell>{group.billings.length}</TableCell>
+                            <TableCell className="font-semibold">
+                              {formatCurrency(group.totalAmount)}
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={(e) => {
+                                e.stopPropagation();
+                                toggleUnitExpansion(group.unit);
+                              }}>
+                                {expandedUnits.has(group.unit) ? (
+                                  <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+
+                          {/* Detalhes das cobranças quando expandido */}
+                          {expandedUnits.has(group.unit) && (
+                            <TableRow className="bg-muted/20">
+                              <TableCell colSpan={5} className="p-0">
+                                <div className="p-2">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Descrição</TableHead>
+                                        <TableHead>Valor</TableHead>
+                                        <TableHead>Vencimento</TableHead>
+                                        <TableHead>Status</TableHead>
+                                        <TableHead className="w-[50px]"></TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {group.billings.map((billing) => (
+                                        <TableRow key={billing.id}>
+                                          <TableCell>{billing.description}</TableCell>
+                                          <TableCell>{formatCurrency(billing.amount)}</TableCell>
+                                          <TableCell>{formatDate(billing.dueDate)}</TableCell>
+                                          <TableCell>
+                                            <BillingStatusBadge status={billing.status} />
+                                          </TableCell>
+                                          <TableCell>
+                                            <DropdownMenu>
+                                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                <Button variant="ghost" size="icon">
+                                                  <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                              </DropdownMenuTrigger>
+                                              <DropdownMenuContent align="end">
+                                                <DropdownMenuItem 
+                                                  className="cursor-pointer"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    viewBilling(billing.id);
+                                                  }}
+                                                >
+                                                  <Eye className="mr-2 h-4 w-4" />
+                                                  <span>Visualizar</span>
+                                                </DropdownMenuItem>
+                                                
+                                                {billing.status !== "paid" && billing.status !== "cancelled" && (
+                                                  <DropdownMenuItem 
+                                                    className="cursor-pointer"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      showConfirmAction(
+                                                        'pay',
+                                                        billing.id, 
+                                                        'Marcar como Pago', 
+                                                        'Tem certeza que deseja marcar esta cobrança como paga?',
+                                                        'Marcar como Pago'
+                                                      );
+                                                    }}
+                                                  >
+                                                    <CreditCard className="mr-2 h-4 w-4" />
+                                                    <span>Marcar como Pago</span>
+                                                  </DropdownMenuItem>
+                                                )}
+                                                
+                                                {/* Outros itens do menu dropdown */}
+                                                {!billing.is_sent && billing.status !== "cancelled" && (
+                                                  <DropdownMenuItem 
+                                                    className="cursor-pointer"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      showConfirmAction(
+                                                        'send',
+                                                        billing.id, 
+                                                        'Marcar como Enviado', 
+                                                        'Tem certeza que deseja marcar esta cobrança como enviada?',
+                                                        'Marcar como Enviado'
+                                                      );
+                                                    }}
+                                                  >
+                                                    <Send className="mr-2 h-4 w-4" />
+                                                    <span>Marcar como Enviado</span>
+                                                  </DropdownMenuItem>
+                                                )}
+                                                
+                                                {!billing.is_printed && billing.status !== "cancelled" && (
+                                                  <DropdownMenuItem 
+                                                    className="cursor-pointer"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      showConfirmAction(
+                                                        'print',
+                                                        billing.id, 
+                                                        'Marcar como Impresso', 
+                                                        'Tem certeza que deseja marcar esta cobrança como impressa?',
+                                                        'Marcar como Impresso'
+                                                      );
+                                                    }}
+                                                  >
+                                                    <Printer className="mr-2 h-4 w-4" />
+                                                    <span>Marcar como Impresso</span>
+                                                  </DropdownMenuItem>
+                                                )}
+                                                
+                                                <DropdownMenuItem 
+                                                  className="cursor-pointer"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    editBilling(billing.id);
+                                                  }}
+                                                >
+                                                  <Pencil className="mr-2 h-4 w-4" />
+                                                  <span>Editar</span>
+                                                </DropdownMenuItem>
+                                                
+                                                {billing.status !== "cancelled" && (
+                                                  <DropdownMenuSeparator />
+                                                )}
+                                                
+                                                {billing.status !== "cancelled" && (
+                                                  <DropdownMenuItem 
+                                                    className="cursor-pointer text-destructive"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      showConfirmAction(
+                                                        'cancel',
+                                                        billing.id, 
+                                                        'Cancelar Cobrança', 
+                                                        'Tem certeza que deseja cancelar esta cobrança? Esta ação não pode ser desfeita.',
+                                                        'Cancelar'
+                                                      );
+                                                    }}
+                                                  >
+                                                    <Trash2 className="mr-2 h-4 w-4" />
+                                                    <span>Cancelar Cobrança</span>
+                                                  </DropdownMenuItem>
+                                                )}
+                                              </DropdownMenuContent>
+                                            </DropdownMenu>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-24 text-center">
+                          Nenhuma cobrança encontrada.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Tabela Mobile - Também consolidada */}
+              <div className="md:hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Unidade</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groupedBillings.length > 0 ? (
+                      groupedBillings.map((group) => (
+                        <React.Fragment key={group.unit}>
+                          <TableRow 
+                            className="cursor-pointer hover:bg-muted/50"
+                            onClick={() => toggleUnitExpansion(group.unit)}
+                          >
+                            <TableCell>
+                              <div className="space-y-1">
+                                <div className="font-medium">{group.unit}</div>
+                                <div className="text-sm text-muted-foreground">{group.resident}</div>
+                                <div className="text-sm text-muted-foreground">{group.billings.length} cobranças</div>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                              {formatCurrency(group.totalAmount)}
+                            </TableCell>
+                            <TableCell>
+                              <Button variant="ghost" size="icon" onClick={(e) => {
+                                e.stopPropagation();
+                                toggleUnitExpansion(group.unit);
+                              }}>
+                                {expandedUnits.has(group.unit) ? (
+                                  <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                          
+                          {expandedUnits.has(group.unit) && (
+                            <TableRow className="bg-muted/20">
+                              <TableCell colSpan={3} className="p-0">
+                                <div className="p-2">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Descrição</TableHead>
+                                        <TableHead className="text-right">Valor</TableHead>
+                                        <TableHead className="w-[50px]"></TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {group.billings.map((billing) => (
+                                        <TableRow key={billing.id}>
+                                          <TableCell>
+                                            <div className="space-y-1">
+                                              <div className="font-medium">{billing.description}</div>
+                                              <div className="flex items-center text-sm text-muted-foreground">
+                                                <CalendarIcon className="mr-1 h-3 w-3" />
+                                                {formatDate(billing.dueDate)}
+                                              </div>
+                                              <div>
+                                                <BillingStatusBadge status={billing.status} />
+                                              </div>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell className="text-right font-medium">
+                                            {formatCurrency(billing.amount)}
+                                          </TableCell>
+                                          <TableCell>
+                                            <DropdownMenu>
+                                              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                <Button variant="ghost" size="icon">
+                                                  <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                              </DropdownMenuTrigger>
+                                              <DropdownMenuContent align="end">
+                                                <DropdownMenuItem 
+                                                  className="cursor-pointer"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    viewBilling(billing.id);
+                                                  }}
+                                                >
+                                                  <Eye className="mr-2 h-4 w-4" />
+                                                  <span>Visualizar</span>
+                                                </DropdownMenuItem>
+                                                
+                                                {billing.status !== "paid" && billing.status !== "cancelled" && (
+                                                  <DropdownMenuItem 
+                                                    className="cursor-pointer"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      showConfirmAction(
+                                                        'pay',
+                                                        billing.id, 
+                                                        'Marcar como Pago', 
+                                                        'Tem certeza que deseja marcar esta cobrança como paga?',
+                                                        'Marcar como Pago'
+                                                      );
+                                                    }}
+                                                  >
+                                                    <CreditCard className="mr-2 h-4 w-4" />
+                                                    <span>Marcar como Pago</span>
+                                                  </DropdownMenuItem>
+                                                )}
+                                                
+                                                {/* Outros itens do menu */}
+                                                {/* ... */}
+                                              </DropdownMenuContent>
+                                            </DropdownMenu>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={3} className="h-24 text-center">
+                          Nenhuma cobrança encontrada.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Confirmation Dialog */}
@@ -1273,3 +1627,5 @@ const Billing = () => {
 };
 
 export default Billing;
+
+

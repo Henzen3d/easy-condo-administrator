@@ -1,6 +1,5 @@
-
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
-import { toast } from "sonner";
+import { toast as sonnerToast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -71,6 +70,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/components/ui/use-toast";
 
 // Tipos para as unidades e moradores
 interface Unit {
@@ -147,6 +147,221 @@ const UnitSelect = React.memo(({
 
 UnitSelect.displayName = 'UnitSelect';
 
+// Create memoized components for better performance
+const UnitRow = React.memo(({ unit, onEdit, onDelete, onAddResident }: {
+  unit: Unit,
+  onEdit: (unit: Unit) => void,
+  onDelete: (id: number) => void,
+  onAddResident: (unit: Unit) => void
+}) => {
+  return (
+    <TableRow>
+      <TableCell className="font-medium">{unit.number}</TableCell>
+      <TableCell>{unit.block}</TableCell>
+      <TableCell>{unit.owner || "Não atribuído"}</TableCell>
+      <TableCell>{unit.residents}</TableCell>
+      <TableCell>
+        <span className={`px-2 py-1 rounded-full text-xs ${
+          unit.status === 'occupied' ? 'bg-green-100 text-green-800' :
+          unit.status === 'vacant' ? 'bg-amber-100 text-amber-800' :
+          'bg-gray-100 text-gray-800'
+        }`}>
+          {unit.status === 'occupied' ? 'Ocupado' : 
+           unit.status === 'vacant' ? 'Vago' : unit.status}
+        </span>
+      </TableCell>
+      <TableCell>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onEdit(unit)}>
+              <PencilIcon className="mr-2 h-4 w-4" />
+              <span>Editar</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onAddResident(unit)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              <span>Adicionar Morador</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onDelete(unit.id)} className="text-red-600">
+              <Trash2 className="mr-2 h-4 w-4" />
+              <span>Excluir</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+    </TableRow>
+  );
+});
+
+const ResidentRow = React.memo(({ resident, onEdit, onDelete }: {
+  resident: Resident,
+  onEdit: (resident: Resident) => void,
+  onDelete: (resident: Resident) => void
+}) => {
+  return (
+    <TableRow>
+      <TableCell className="font-medium">{resident.name}</TableCell>
+      <TableCell>{resident.email}</TableCell>
+      <TableCell>{resident.phone}</TableCell>
+      <TableCell>{`${resident.unit_block} - ${resident.unit_number}`}</TableCell>
+      <TableCell>
+        <span className={`px-2 py-1 rounded-full text-xs ${
+          resident.role === 'owner' ? 'bg-blue-100 text-blue-800' :
+          resident.role === 'tenant' ? 'bg-purple-100 text-purple-800' :
+          'bg-gray-100 text-gray-800'
+        }`}>
+          {resident.role === 'owner' ? 'Proprietário' : 
+           resident.role === 'tenant' ? 'Inquilino' : resident.role}
+        </span>
+      </TableCell>
+      <TableCell>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onEdit(resident)}>
+              <PencilIcon className="mr-2 h-4 w-4" />
+              <span>Editar</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onDelete(resident)} className="text-red-600">
+              <Trash2 className="mr-2 h-4 w-4" />
+              <span>Excluir</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </TableCell>
+    </TableRow>
+  );
+});
+
+// Create ResidentDialog component to fix the missing component error and flickering issues
+const ResidentDialog = React.memo(({ 
+  open, 
+  onOpenChange, 
+  units, 
+  formData, 
+  setFormData,
+  isAddingResident,
+  loading,
+  handleAddResident,
+  handleUpdateResident
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  units: Unit[];
+  formData: any;
+  setFormData: (data: any) => void;
+  isAddingResident: boolean;
+  loading: boolean;
+  handleAddResident: () => void;
+  handleUpdateResident: () => void;
+}) => {
+  // Create local handlers to update specific fields
+  const updateField = (field: string, value: string) => {
+    setFormData(prev => ({...prev, [field]: value}));
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {isAddingResident ? "Adicionar Novo Morador" : "Editar Morador"}
+          </DialogTitle>
+          <DialogDescription>
+            Preencha os dados do morador.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="resident-name">Nome</Label>
+            <Input 
+              id="resident-name" 
+              placeholder="Nome completo" 
+              value={formData.residentName}
+              onChange={e => updateField('residentName', e.target.value)}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="resident-email">Email</Label>
+            <Input 
+              id="resident-email" 
+              type="email"
+              placeholder="email@exemplo.com" 
+              value={formData.residentEmail}
+              onChange={e => updateField('residentEmail', e.target.value)}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="resident-phone">Telefone</Label>
+            <Input 
+              id="resident-phone" 
+              placeholder="(00) 00000-0000" 
+              value={formData.residentPhone}
+              onChange={e => updateField('residentPhone', e.target.value)}
+            />
+          </div>
+          
+          <UnitSelect 
+            units={units} 
+            formData={formData} 
+            setFormData={setFormData} 
+          />
+          
+          <div className="space-y-2">
+            <Label htmlFor="resident-role">Função</Label>
+            <Select 
+              value={formData.residentRole}
+              onValueChange={(value) => updateField('residentRole', value)}
+            >
+              <SelectTrigger id="resident-role">
+                <SelectValue placeholder="Selecione a função" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="owner">Proprietário</SelectItem>
+                <SelectItem value="tenant">Inquilino</SelectItem>
+                <SelectItem value="resident">Morador</SelectItem>
+                <SelectItem value="visitor">Visitante</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button 
+            type="submit" 
+            disabled={loading}
+            onClick={(e) => {
+              e.preventDefault();
+              if (isAddingResident) {
+                handleAddResident();
+              } else {
+                handleUpdateResident();
+              }
+            }}
+          >
+            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isAddingResident ? "Adicionar" : "Atualizar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+});
+
+ResidentDialog.displayName = 'ResidentDialog';
+
 export default function Units() {
   const [activeTab, setActiveTab] = useState("units");
   const [searchQuery, setSearchQuery] = useState("");
@@ -179,9 +394,36 @@ export default function Units() {
   const [unitToDelete, setUnitToDelete] = useState<number | null>(null);
   const [residentToDelete, setResidentToDelete] = useState<Resident | null>(null);
   const [unitExists, setUnitExists] = useState(false);
+  const [tablesVerified, setTablesVerified] = useState(false);
+  const { toast: customToast } = useToast();
 
-  // Função para verificar se uma unidade existe
-  const checkUnitExists = async (number: string, block: string): Promise<boolean> => {
+  // Define the reset functions early to avoid the "used before declaration" errors
+  const resetUnitForm = useCallback(() => {
+    setFormData(prev => ({
+      ...prev,
+      unitNumber: "",
+      unitBlock: "",
+      unitOwner: "",
+      unitOwnerEmail: "",
+      unitOwnerPhone: "",
+      unitStatus: "occupied"
+    }));
+  }, []);
+
+  const resetResidentForm = useCallback(() => {
+    setFormData(prev => ({
+      ...prev,
+      residentName: "",
+      residentEmail: "",
+      residentPhone: "",
+      residentUnit: "",
+      residentBlock: "",
+      residentRole: "resident"
+    }));
+  }, []);
+
+  // Convert functions to useCallback to prevent unnecessary re-renders
+  const checkUnitExists = useCallback(async (number: string, block: string): Promise<boolean> => {
     const { data: existingUnits } = await supabase
       .from('units')
       .select('id')
@@ -189,86 +431,108 @@ export default function Units() {
       .eq('block', block.trim());
 
     return existingUnits ? existingUnits.length > 0 : false;
-  };
-
-  // Carregar dados do Supabase
-  useEffect(() => {
-    fetchUnits();
-    fetchResidents();
   }, []);
 
-  // Função para verificar unidade duplicada ao digitar
-  const handleUnitNumberChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUnitNumberChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setFormData(prev => ({ ...prev, unitNumber: value }));
 
     try {
-      if (value && formData.unitBlock) {
-        const exists = await checkUnitExists(value, formData.unitBlock);
+      if (value) {
+        const blockValue = formData.unitBlock.trim() || '';
+        const exists = await checkUnitExists(value, blockValue);
         setUnitExists(exists);
         if (exists) {
-          toast.warning(`Atenção: A unidade ${value} do bloco ${formData.unitBlock} já está cadastrada.`, {
-            duration: 4000,
+          customToast({
+            title: "Atenção",
+            description: `A unidade ${value}${blockValue ? ` do bloco ${blockValue}` : ''} já está cadastrada.`,
+            variant: "destructive"
           });
         }
       }
     } catch (error) {
       console.error('Erro ao verificar unidade:', error);
     }
-  };
+  }, [formData.unitBlock, checkUnitExists, customToast]);
 
-  // Função para verificar unidade duplicada ao digitar o bloco
-  const handleBlockChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBlockChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setFormData(prev => ({ ...prev, unitBlock: value }));
 
     try {
-      if (value && formData.unitNumber) {
-        const exists = await checkUnitExists(formData.unitNumber, value);
+      if (formData.unitNumber) {
+        const blockValue = value.trim() || '';
+        const exists = await checkUnitExists(formData.unitNumber, blockValue);
         setUnitExists(exists);
         if (exists) {
-          toast.warning(`Atenção: A unidade ${formData.unitNumber} do bloco ${value} já está cadastrada.`, {
-            duration: 4000,
+          customToast({
+            title: "Atenção",
+            description: `A unidade ${formData.unitNumber}${blockValue ? ` do bloco ${blockValue}` : ''} já está cadastrada.`,
+            variant: "destructive"
           });
         }
       }
     } catch (error) {
       console.error('Erro ao verificar unidade:', error);
     }
-  };
+  }, [formData.unitNumber, checkUnitExists, customToast]);
 
-  // Buscar unidades
-  async function fetchUnits() {
+  const fetchUnits = useCallback(async () => {
     try {
       setLoading(true);
+      console.log('Fetching units...');
       const { data, error } = await supabase
         .from('units')
         .select('*');
       
-      if (error) throw error;
+      console.log('Units query response:', { data, error });
       
+      if (error) {
+        console.error('Error details:', JSON.stringify(error));
+        throw error;
+      }
+      
+      // Set the units state with the fetched data (even if empty)
       setUnits(data || []);
+      
     } catch (error) {
-      console.error('Erro ao buscar unidades:', error);
-      toast.error("Não foi possível carregar as unidades.");
+      console.error('Error fetching units:', error);
+      customToast({
+        title: "Não foi possível carregar as unidades.",
+        description: "Ocorreu um erro ao carregar as unidades.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  // Buscar moradores com dados da unidade
-  async function fetchResidents() {
+  const fetchResidents = useCallback(async () => {
     try {
       setLoading(true);
-      const { data: unitsData } = await supabase
+      console.log('Fetching units for residents...');
+      const { data: unitsData, error: unitsError } = await supabase
         .from('units')
         .select('id, number, block');
       
+      console.log('Units for residents response:', { unitsData, unitsError });
+      
+      if (unitsError) {
+        console.error('Error details (units):', JSON.stringify(unitsError));
+        throw unitsError;
+      }
+      
+      console.log('Fetching residents...');
       const { data, error } = await supabase
         .from('residents')
         .select('*');
       
-      if (error) throw error;
+      console.log('Residents query response:', { data, error });
+      
+      if (error) {
+        console.error('Error details (residents):', JSON.stringify(error));
+        throw error;
+      }
       
       // Mapear os moradores com os dados da unidade
       const residentsWithUnitInfo = data?.map(resident => {
@@ -282,61 +546,90 @@ export default function Units() {
       
       setResidents(residentsWithUnitInfo);
     } catch (error) {
-      console.error('Erro ao buscar moradores:', error);
-      toast.error("Não foi possível carregar os moradores.");
+      console.error('Error fetching residents:', error);
+      customToast({
+        title: "Não foi possível carregar os moradores.",
+        description: "Ocorreu um erro ao carregar os moradores.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  // Adicionar nova unidade
-  async function handleAddUnit() {
+  const handleAddUnit = useCallback(async () => {
+    console.log('handleAddUnit chamado - iniciando processo de adição');
+    
     try {
       setLoading(true);
+      console.log('Loading definido como true');
       
-      // Validar campos obrigatórios
-      if (!formData.unitNumber || !formData.unitBlock || !formData.unitOwner) {
-        toast.error("Número, bloco e proprietário são campos obrigatórios.", {
-          duration: 4000,
+      // Validar campos obrigatórios - bloco não é mais obrigatório
+      console.log('Validando campos obrigatórios:', formData);
+      if (!formData.unitNumber || !formData.unitOwner) {
+        console.log('Campos obrigatórios não preenchidos');
+        customToast({
+          title: "Campos obrigatórios",
+          description: "Número da unidade e proprietário são campos obrigatórios.",
+          variant: "destructive"
         });
+        setLoading(false);
         return;
       }
 
-      // Verificar se a unidade já existe
-      if (unitExists) {
-        toast.error(`A unidade ${formData.unitNumber} do bloco ${formData.unitBlock} já está cadastrada.`, {
-          duration: 4000,
+      // Verificar se a unidade já existe - usando bloco vazio se não for especificado
+      const blockValue = formData.unitBlock.trim() || '';
+      console.log('Verificando se a unidade já existe, blockValue:', blockValue);
+      
+      const exists = await checkUnitExists(formData.unitNumber, blockValue);
+      console.log('Unidade existe?', exists);
+      if (exists) {
+        console.log('Unidade já existe no sistema');
+        customToast({
+          title: "Unidade já cadastrada",
+          description: `A unidade ${formData.unitNumber}${blockValue ? ` do bloco ${blockValue}` : ''} já está cadastrada.`,
+          variant: "destructive"
         });
+        setLoading(false);
         return;
       }
 
       // 1. Criar a unidade com dados sanitizados
       const newUnit = {
         number: formData.unitNumber.trim(),
-        block: formData.unitBlock.trim(),
+        block: blockValue,
         owner: formData.unitOwner.trim(),
         residents: 1,
         status: formData.unitStatus
       };
+      console.log('Dados da nova unidade preparados:', newUnit);
 
+      console.log('Enviando requisição para criar unidade no Supabase');
       const { data: unitData, error: unitError } = await supabase
         .from('units')
         .insert([newUnit])
         .select()
         .single();
 
+      console.log('Resposta do Supabase:', { unitData, unitError });
+      
       if (unitError) {
         // Verificar especificamente erro de violação única
+        console.log('Erro ao inserir unidade:', unitError);
         if (unitError.code === '23505') {
-          toast.error(`A unidade ${formData.unitNumber} do bloco ${formData.unitBlock} já está cadastrada.`, {
-            duration: 5000,
+          customToast({
+            title: "Unidade já cadastrada",
+            description: `A unidade ${formData.unitNumber} do bloco ${formData.unitBlock} já está cadastrada.`,
+            variant: "destructive"
           });
+          setLoading(false);
           return;
         }
         throw unitError;
       }
 
       if (!unitData) {
+        console.log('Nenhum dado retornado após criar unidade');
         throw new Error('Nenhum dado retornado após criar unidade');
       }
 
@@ -349,13 +642,18 @@ export default function Units() {
         role: "owner",
         status: "active"
       };
+      console.log('Dados do novo morador preparados:', newResident);
 
+      console.log('Enviando requisição para criar morador no Supabase');
       const { error: residentError } = await supabase
         .from('residents')
         .insert([newResident]);
 
+      console.log('Resposta para criação de morador:', { residentError });
+      
       if (residentError) {
         // Rollback - deletar a unidade se falhar ao criar o morador
+        console.log('Erro ao inserir morador, fazendo rollback da unidade');
         await supabase
           .from('units')
           .delete()
@@ -365,26 +663,36 @@ export default function Units() {
       }
 
       // Atualizar as listas locais
+      console.log('Atualizando lista de unidades local');
       setUnits(prev => [...prev, unitData]);
+      console.log('Buscando lista atualizada de moradores');
       await fetchResidents(); // Buscar lista atualizada de moradores
       
+      console.log('Resetando formulário de unidades');
       resetUnitForm();
+      console.log('Fechando dialog de unidade');
       setOpenUnitDialog(false);
       
-      toast.success("Unidade e proprietário cadastrados com sucesso!");
+      console.log('Exibindo mensagem de sucesso');
+      customToast({
+        title: "Unidade e proprietário cadastrados com sucesso!",
+        description: "A unidade e o proprietário foram cadastrados com sucesso."
+      });
       
     } catch (error: any) {
       console.error('Erro ao adicionar unidade e proprietário:', error);
-      toast.error("Não foi possível cadastrar a unidade e o proprietário.", {
-        duration: 4000,
+      customToast({
+        title: "Não foi possível cadastrar a unidade e o proprietário.",
+        description: "Ocorreu um erro ao cadastrar a unidade e o proprietário.",
+        variant: "destructive"
       });
     } finally {
+      console.log('Finalizando função handleAddUnit - definindo loading como false');
       setLoading(false);
     }
-  }
+  }, [formData, checkUnitExists, fetchResidents, resetUnitForm, customToast]);
 
-  // Atualizar unidade existente
-  async function handleUpdateUnit() {
+  const handleUpdateUnit = useCallback(async () => {
     if (!selectedUnit) return;
     
     try {
@@ -417,24 +725,29 @@ export default function Units() {
       setSelectedUnit(null);
       setOpenUnitDialog(false);
       
-      toast.success("Unidade atualizada com sucesso!");
+      customToast({
+        title: "Unidade atualizada com sucesso!",
+        description: "A unidade foi atualizada com sucesso."
+      });
       
     } catch (error) {
       console.error('Erro ao atualizar unidade:', error);
-      toast.error("Não foi possível atualizar a unidade.");
+      customToast({
+        title: "Não foi possível atualizar a unidade.",
+        description: "Ocorreu um erro ao atualizar a unidade.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
-  }
+  }, [formData, selectedUnit, resetUnitForm]);
 
-  // Preparar exclusão de unidade
-  function prepareDeleteUnit(id: number) {
+  const prepareDeleteUnit = useCallback((id: number) => {
     setUnitToDelete(id);
     setAlertDialogOpen(true);
-  }
+  }, []);
 
-  // Excluir unidade
-  async function handleDeleteUnit() {
+  const handleDeleteUnit = useCallback(async () => {
     if (!unitToDelete) return;
     
     try {
@@ -450,23 +763,29 @@ export default function Units() {
       // Atualizar a lista local
       setUnits(prev => prev.filter(unit => unit.id !== unitToDelete));
       
-      toast.success("Unidade excluída com sucesso!");
+      customToast({
+        title: "Unidade excluída com sucesso!",
+        description: "A unidade foi excluída com sucesso."
+      });
       
       // Atualizar a lista de moradores
       fetchResidents();
       
     } catch (error) {
       console.error('Erro ao excluir unidade:', error);
-      toast.error("Não foi possível excluir a unidade.");
+      customToast({
+        title: "Não foi possível excluir a unidade.",
+        description: "Ocorreu um erro ao excluir a unidade.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
       setUnitToDelete(null);
       setAlertDialogOpen(false);
     }
-  }
+  }, [unitToDelete, fetchResidents]);
 
-  // Adicionar novo morador
-  async function handleAddResident() {
+  const handleAddResident = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -476,8 +795,10 @@ export default function Units() {
       );
 
       if (!targetUnit) {
-        toast.error("Unidade não encontrada. Verifique o número e bloco.", {
-          duration: 5000,
+        customToast({
+          title: "Unidade não encontrada",
+          description: "Unidade não encontrada. Verifique o número e bloco.",
+          variant: "destructive"
         });
         setLoading(false);
         return;
@@ -512,18 +833,24 @@ export default function Units() {
       resetResidentForm();
       setOpenResidentDialog(false);
       
-      toast.success("Morador adicionado com sucesso!");
+      customToast({
+        title: "Morador adicionado com sucesso!",
+        description: "O morador foi adicionado com sucesso."
+      });
       
     } catch (error) {
       console.error('Erro ao adicionar morador:', error);
-      toast.error("Não foi possível adicionar o morador.");
+      customToast({
+        title: "Não foi possível adicionar o morador.",
+        description: "Ocorreu um erro ao adicionar o morador.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
-  }
+  }, [formData, units, fetchUnits, fetchResidents, resetResidentForm]);
 
-  // Atualizar morador existente
-  async function handleUpdateResident() {
+  const handleUpdateResident = useCallback(async () => {
     if (!selectedResident) return;
     
     try {
@@ -534,8 +861,10 @@ export default function Units() {
       );
 
       if (!targetUnit) {
-        toast.error("Unidade não encontrada. Verifique o número e bloco.", {
-          duration: 5000,
+        customToast({
+          title: "Unidade não encontrada",
+          description: "Unidade não encontrada. Verifique o número e bloco.",
+          variant: "destructive"
         });
         return;
       }
@@ -596,24 +925,29 @@ export default function Units() {
       setSelectedResident(null);
       setOpenResidentDialog(false);
       
-      toast.success("Morador atualizado com sucesso!");
+      customToast({
+        title: "Morador atualizado com sucesso!",
+        description: "O morador foi atualizado com sucesso."
+      });
       
     } catch (error) {
       console.error('Erro ao atualizar morador:', error);
-      toast.error("Não foi possível atualizar o morador.");
+      customToast({
+        title: "Não foi possível atualizar o morador.",
+        description: "Ocorreu um erro ao atualizar o morador.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
-  }
+  }, [formData, units, selectedResident, fetchUnits, fetchResidents, resetResidentForm]);
 
-  // Preparar exclusão de morador
-  function prepareDeleteResident(resident: Resident) {
+  const prepareDeleteResident = useCallback((resident: Resident) => {
     setResidentToDelete(resident);
     setAlertDialogOpen(true);
-  }
+  }, []);
 
-  // Excluir morador
-  async function handleDeleteResident() {
+  const handleDeleteResident = useCallback(async () => {
     if (!residentToDelete) return;
     
     try {
@@ -639,67 +973,26 @@ export default function Units() {
       fetchUnits();
       fetchResidents();
       
-      toast.success("Morador excluído com sucesso!");
+      customToast({
+        title: "Morador excluído com sucesso!",
+        description: "O morador foi excluído com sucesso."
+      });
       
     } catch (error) {
       console.error('Erro ao excluir morador:', error);
-      toast.error("Não foi possível excluir o morador.");
+      customToast({
+        title: "Não foi possível excluir o morador.",
+        description: "Ocorreu um erro ao excluir o morador.",
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
       setResidentToDelete(null);
       setAlertDialogOpen(false);
     }
-  }
+  }, [residentToDelete, fetchResidents]);
 
-  // Filtrar unidades
-  const filteredUnits = units.filter((unit) => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      unit.number.toLowerCase().includes(searchLower) ||
-      unit.block.toLowerCase().includes(searchLower) ||
-      unit.owner.toLowerCase().includes(searchLower)
-    );
-  });
-
-  // Filtrar moradores
-  const filteredResidents = residents.filter((resident) => {
-    const searchLower = searchQuery.toLowerCase();
-    return (
-      resident.name.toLowerCase().includes(searchLower) ||
-      resident.email.toLowerCase().includes(searchLower) ||
-      (resident.unit_number && resident.unit_number.toLowerCase().includes(searchLower)) ||
-      (resident.unit_block && resident.unit_block.toLowerCase().includes(searchLower))
-    );
-  });
-
-  // Resetar o formulário de unidade
-  function resetUnitForm() {
-    setFormData(prev => ({
-      ...prev,
-      unitNumber: "",
-      unitBlock: "",
-      unitOwner: "",
-      unitOwnerEmail: "",
-      unitOwnerPhone: "",
-      unitStatus: "occupied"
-    }));
-  }
-
-  // Resetar o formulário de morador
-  function resetResidentForm() {
-    setFormData(prev => ({
-      ...prev,
-      residentName: "",
-      residentEmail: "",
-      residentPhone: "",
-      residentUnit: "",
-      residentBlock: "",
-      residentRole: "resident"
-    }));
-  }
-
-  // Editar unidade
-  function handleEditUnit(unit: Unit) {
+  const handleEditUnit = useCallback((unit: Unit) => {
     setSelectedUnit(unit);
     setIsAddingUnit(false);
     setFormData(prev => ({
@@ -710,10 +1003,9 @@ export default function Units() {
       unitStatus: unit.status
     }));
     setOpenUnitDialog(true);
-  }
+  }, []);
 
-  // Editar morador
-  function handleEditResident(resident: Resident) {
+  const handleEditResident = useCallback((resident: Resident) => {
     setSelectedResident(resident);
     setIsAddingResident(false);
     setFormData(prev => ({
@@ -726,10 +1018,9 @@ export default function Units() {
       residentRole: resident.role
     }));
     setOpenResidentDialog(true);
-  }
+  }, []);
 
-  // Adicionar morador a partir de uma unidade
-  function handleAddResidentToUnit(unit: Unit) {
+  const handleAddResidentToUnit = useCallback((unit: Unit) => {
     setActiveTab("residents");
     setIsAddingResident(true);
     setSelectedResident(null);
@@ -743,113 +1034,111 @@ export default function Units() {
       residentRole: "resident"
     }));
     setOpenResidentDialog(true);
-  }
+  }, []);
 
-  // Lidar com a abertura do diálogo de adicionar unidade
-  function handleOpenAddUnitDialog() {
+  const handleOpenAddUnitDialog = useCallback(() => {
+    console.log('handleOpenAddUnitDialog chamado');
     setIsAddingUnit(true);
     setSelectedUnit(null);
     resetUnitForm();
+    console.log('Antes de abrir o diálogo, openUnitDialog:', openUnitDialog);
     setOpenUnitDialog(true);
-  }
+    console.log('Depois de abrir o diálogo, openUnitDialog:', true);
+  }, [resetUnitForm]);
 
-  // Lidar com a abertura do diálogo de adicionar morador
-  function handleOpenAddResidentDialog() {
+  const handleOpenAddResidentDialog = useCallback(() => {
     setIsAddingResident(true);
     setSelectedResident(null);
     resetResidentForm();
     setOpenResidentDialog(true);
-  }
+  }, [resetResidentForm]);
 
-  // Obter lista única de números de unidades para o combobox
-  const uniqueUnitNumbers = Array.from(new Set(units.map(unit => unit.number))).filter(Boolean);
-  
-  // Obter lista única de blocos para o combobox
-  const uniqueBlocks = Array.from(new Set(units.map(unit => unit.block))).filter(Boolean);
+  // Use useMemo for filtered lists to prevent recalculation on every render
+  const filteredUnits = useMemo(() => {
+    return units.filter(unit => 
+      unit.number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      unit.block.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      unit.owner.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [units, searchQuery]);
 
-  // Componente de seleção de unidade para o formulário de morador
-  // UnitSelect foi movido para fora do componente principal Units
+  const filteredResidents = useMemo(() => {
+    return residents.filter(resident => 
+      resident.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      resident.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      resident.phone.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (resident.unit_number && resident.unit_number.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (resident.unit_block && resident.unit_block.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [residents, searchQuery]);
 
-  // Formulário de Edição de Morador
-  const ResidentDialog = () => {
-    return (
-      <Dialog open={openResidentDialog} onOpenChange={setOpenResidentDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {isAddingResident ? "Adicionar Novo Morador" : "Editar Morador"}
-            </DialogTitle>
-            <DialogDescription>
-              Preencha os dados do morador.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="resident-name">Nome</Label>
-              <Input
-                id="resident-name"
-                placeholder="Nome completo"
-                value={formData.residentName}
-                onChange={e => setFormData({...formData, residentName: e.target.value})}
-              />
-            </div>
+  // Verificar e configurar tabelas e RLS
+  useEffect(() => {
+    const checkAndConfigureDatabase = async () => {
+      try {
+        setLoading(true);
+        console.log("Verificando tabelas necessárias...");
+        
+        // Importar funções de verificação de tabela
+        const { 
+          ensureUnitsTableExists, 
+          ensureResidentsTableExists, 
+          configureRLS 
+        } = await import('@/utils/dbUtils');
+        
+        // Garantir que a tabela units existe
+        const unitsExists = await ensureUnitsTableExists();
+        if (!unitsExists) {
+          customToast({
+            title: "Erro na estrutura de dados",
+            description: "Não foi possível verificar ou criar a tabela de unidades.",
+            variant: "destructive"
+          });
+          setLoading(false);
+          return;
+        }
+        
+        // Garantir que a tabela residents existe
+        const residentsExists = await ensureResidentsTableExists();
+        if (!residentsExists) {
+          customToast({
+            title: "Erro na estrutura de dados",
+            description: "Não foi possível verificar ou criar a tabela de moradores.",
+            variant: "destructive"
+          });
+          setLoading(false);
+          return;
+        }
+        
+        // Verificar RLS nas tabelas - não bloqueia a execução mesmo se falhar
+        await configureRLS();
+        
+        // Se chegou até aqui, as tabelas existem e estão configuradas
+        console.log("Tabelas verificadas e configuradas com sucesso");
+        setTablesVerified(true);
+      } catch (error) {
+        console.error("Erro ao verificar tabelas:", error);
+        customToast({
+          title: "Erro na estrutura de dados",
+          description: "Ocorreu um erro ao verificar a estrutura do banco de dados.",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    checkAndConfigureDatabase();
+  }, []);
 
-            <UnitSelect 
-              units={units} 
-              formData={formData} 
-              setFormData={setFormData} 
-            />
-
-            <div className="space-y-2">
-              <Label htmlFor="resident-email">Email</Label>
-              <Input
-                id="resident-email"
-                type="email"
-                placeholder="email@exemplo.com"
-                value={formData.residentEmail}
-                onChange={e => setFormData({...formData, residentEmail: e.target.value})}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="resident-phone">Telefone</Label>
-              <Input
-                id="resident-phone"
-                placeholder="(00) 00000-0000"
-                value={formData.residentPhone}
-                onChange={e => setFormData({...formData, residentPhone: e.target.value})}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="resident-role">Função</Label>
-              <Select
-                value={formData.residentRole}
-                onValueChange={(value) => setFormData({...formData, residentRole: value})}
-              >
-                <SelectTrigger id="resident-role">
-                  <SelectValue placeholder="Selecione a função" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="owner">Proprietário</SelectItem>
-                  <SelectItem value="resident">Morador</SelectItem>
-                  <SelectItem value="tenant">Inquilino</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenResidentDialog(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={isAddingResident ? handleAddResident : handleUpdateResident}>
-              {isAddingResident ? "Adicionar" : "Atualizar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    )
-  }
+  // Add useEffect to load data on component mount
+  useEffect(() => {
+    // Só carregar dados após verificar tabelas
+    if (tablesVerified) {
+      fetchUnits();
+      fetchResidents();
+    }
+  }, [tablesVerified]);
 
   return (
     <div className="space-y-6">
@@ -918,74 +1207,13 @@ export default function Units() {
                   </TableRow>
                 ) : filteredUnits.length > 0 ? (
                   filteredUnits.map((unit) => (
-                    <TableRow key={unit.id}>
-                      <TableCell>
-                        <div className="font-medium">
-                          {unit.number}
-                          {/* Informações extras para mobile */}
-                          <div className="sm:hidden space-y-1 mt-1">
-                            <div className="text-sm text-muted-foreground">
-                              Bloco {unit.block}
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                              {unit.owner}
-                            </div>
-                            <div className="flex items-center gap-1 text-sm">
-                              <Users size={14} className="text-gray-500" />
-                              <span>{unit.residents}</span>
-                            </div>
-                            <Badge 
-                              variant={unit.status === "occupied" ? "default" : "secondary"}
-                              className={unit.status === "occupied" ? "bg-green-500" : ""}
-                            >
-                              {unit.status === "occupied" ? "Ocupado" : "Vago"}
-                            </Badge>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell">{unit.block}</TableCell>
-                      <TableCell className="hidden md:table-cell">{unit.owner}</TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <div className="flex items-center gap-1">
-                          <Users size={16} className="text-gray-500" />
-                          <span>{unit.residents}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <Badge 
-                          variant={unit.status === "occupied" ? "default" : "secondary"}
-                          className={unit.status === "occupied" ? "bg-green-500" : ""}
-                        >
-                          {unit.status === "occupied" ? "Ocupado" : "Vago"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer" onClick={() => handleEditUnit(unit)}>
-                              <PencilIcon size={16} />
-                              <span>Editar</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer" onClick={() => handleAddResidentToUnit(unit)}>
-                              <UserPlus size={16} />
-                              <span>Adicionar Morador</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="flex items-center gap-2 text-red-600 cursor-pointer" 
-                              onClick={() => prepareDeleteUnit(unit.id)}
-                            >
-                              <Trash2 size={16} />
-                              <span>Excluir</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                    <UnitRow 
+                      key={unit.id}
+                      unit={unit}
+                      onEdit={handleEditUnit}
+                      onDelete={prepareDeleteUnit}
+                      onAddResident={handleAddResidentToUnit}
+                    />
                   ))
                 ) : (
                   <TableRow>
@@ -1020,71 +1248,12 @@ export default function Units() {
                   </TableRow>
                 ) : filteredResidents.length > 0 ? (
                   filteredResidents.map((resident) => (
-                    <TableRow key={resident.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-9 w-9">
-                            <AvatarImage src="" alt={resident.name} />
-                            <AvatarFallback className="bg-primary text-primary-foreground font-medium">
-                              {resident.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{resident.name}</p>
-                            {/* Informações extras para mobile */}
-                            <div className="sm:hidden space-y-1 mt-1">
-                              <p className="text-sm text-muted-foreground">
-                                {resident.email}
-                              </p>
-                              <p className="text-sm text-muted-foreground">
-                                {resident.phone}
-                              </p>
-                              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                <Home size={14} />
-                                <span>{resident.unit_number}, Bloco {resident.unit_block}</span>
-                              </div>
-                              <Badge variant={resident.role === "owner" ? "default" : "secondary"}>
-                                {resident.role === "owner" ? "Proprietário" : "Morador"}
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">{resident.phone}</TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <div className="flex items-center gap-1">
-                          <Home size={16} className="text-gray-500" />
-                          <span>{resident.unit_number}, Bloco {resident.unit_block}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <Badge variant={resident.role === "owner" ? "default" : "secondary"}>
-                          {resident.role === "owner" ? "Proprietário" : "Morador"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem className="flex items-center gap-2 cursor-pointer" onClick={() => handleEditResident(resident)}>
-                              <PencilIcon size={16} />
-                              <span>Editar</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="flex items-center gap-2 text-red-600 cursor-pointer" 
-                              onClick={() => prepareDeleteResident(resident)}
-                            >
-                              <Trash2 size={16} />
-                              <span>Excluir</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                    <ResidentRow 
+                      key={resident.id}
+                      resident={resident}
+                      onEdit={handleEditResident}
+                      onDelete={prepareDeleteResident}
+                    />
                   ))
                 ) : (
                   <TableRow>
@@ -1100,8 +1269,14 @@ export default function Units() {
       </Tabs>
 
       {/* Modal de Unidade */}
-      <Dialog open={openUnitDialog} onOpenChange={setOpenUnitDialog}>
-        <DialogContent>
+      <Dialog open={openUnitDialog} onOpenChange={(open) => {
+        console.log('Dialog onOpenChange chamado com valor:', open);
+        setOpenUnitDialog(open);
+      }}>
+        <DialogContent onInteractOutside={(e) => {
+          console.log('Dialog onInteractOutside chamado');
+          e.preventDefault();
+        }}>
           <DialogHeader>
             <DialogTitle>
               {isAddingUnit ? "Adicionar Nova Unidade" : "Editar Unidade"}
@@ -1113,17 +1288,18 @@ export default function Units() {
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="unit-number">Número da Unidade</Label>
+                <Label htmlFor="unit-number">Número da Unidade *</Label>
                 <Input 
                   id="unit-number" 
                   placeholder="101" 
                   value={formData.unitNumber}
                   onChange={handleUnitNumberChange}
-                  className={formData.unitNumber && formData.unitBlock && unitExists ? "border-red-500" : ""}
+                  className={unitExists ? "border-red-500" : ""}
                 />
+                <p className="text-xs text-muted-foreground">Campo obrigatório</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="unit-block">Bloco</Label>
+                <Label htmlFor="unit-block">Bloco (opcional)</Label>
                 <Input 
                   id="unit-block" 
                   placeholder="A" 
@@ -1131,17 +1307,19 @@ export default function Units() {
                   onChange={handleBlockChange}
                   className={formData.unitNumber && formData.unitBlock && unitExists ? "border-red-500" : ""}
                 />
+                <p className="text-xs text-muted-foreground">Deixe em branco se não houver blocos</p>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="unit-owner">Proprietário</Label>
+              <Label htmlFor="unit-owner">Proprietário *</Label>
               <Input 
                 id="unit-owner" 
                 placeholder="Nome do proprietário" 
                 value={formData.unitOwner}
                 onChange={e => setFormData({...formData, unitOwner: e.target.value})}
               />
+              <p className="text-xs text-muted-foreground">Campo obrigatório</p>
             </div>
 
             <div className="space-y-2">
@@ -1184,13 +1362,29 @@ export default function Units() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenUnitDialog(false)}>
+            <Button 
+              variant="outline" 
+              onClick={(e) => {
+                console.log('Botão Cancelar clicado');
+                setOpenUnitDialog(false);
+              }}
+            >
               Cancelar
             </Button>
             <Button 
-              type="submit" 
+              type="button"
               disabled={loading}
-              onClick={() => isAddingUnit ? handleAddUnit() : handleUpdateUnit()}
+              onClick={(e) => {
+                console.log('Botão Adicionar/Atualizar clicado manualmente');
+                e.preventDefault();
+                if (isAddingUnit) {
+                  console.log('Chamando handleAddUnit diretamente');
+                  handleAddUnit();
+                } else {
+                  console.log('Chamando handleUpdateUnit diretamente');
+                  handleUpdateUnit();
+                }
+              }}
             >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isAddingUnit ? "Adicionar" : "Atualizar"}
@@ -1200,7 +1394,17 @@ export default function Units() {
       </Dialog>
 
       {/* Modal de Morador */}
-      <ResidentDialog />
+      <ResidentDialog 
+        open={openResidentDialog}
+        onOpenChange={setOpenResidentDialog}
+        units={units}
+        formData={formData}
+        setFormData={setFormData}
+        isAddingResident={isAddingResident}
+        loading={loading}
+        handleAddResident={handleAddResident}
+        handleUpdateResident={handleUpdateResident}
+      />
 
       {/* Diálogo de confirmação para exclusão */}
       <AlertDialog open={alertDialogOpen} onOpenChange={setAlertDialogOpen}>
